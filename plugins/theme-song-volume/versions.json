@@ -1,1 +1,10 @@
-[]
+[
+  {
+    "version": "0.1.0.0",
+    "changelog": "[PREVIEW] Initial release for testing. Requires Jellyfin 12.3 and File Transformation 3.x. Native client support is not guaranteed.",
+    "targetAbi": "12.3.0.0",
+    "sourceUrl": "https://github.com/MrBoneCrash/JellyfinPlugins/releases/download/theme-song-volume-v0.1.0.0/ThemeSongVolume-0.1.0.0.zip",
+    "checksum": "76c88a52b3c1825e7f15a81172592f7c",
+    "timestamp": "2026-10-25 03:16:42"
+  }
+]
