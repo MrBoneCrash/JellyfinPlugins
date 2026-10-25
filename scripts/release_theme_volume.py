@@ -16,7 +16,19 @@ REPOSITORY = "MrBoneCrash/JellyfinPlugins"
 
 
 def run(*args):
-    return subprocess.run(args, cwd=ROOT, check=True, text=True, capture_output=True).stdout.strip()
+    result = subprocess.run(args, cwd=ROOT, text=True, capture_output=True)
+    if result.returncode:
+        raise RuntimeError(f"{args[0]} {args[1]} failed: {result.stderr.strip() or result.stdout.strip()}")
+    return result.stdout.strip()
+
+
+def find_release(tag):
+    # GitHub's release-by-tag endpoint does not reliably find unpublished drafts.
+    pages = json.loads(run("gh", "api", f"repos/{REPOSITORY}/releases?per_page=100", "--paginate", "--slurp"))
+    matches = [release for page in pages for release in page if release["tag_name"] == tag]
+    if len(matches) > 1:
+        raise ValueError("Multiple releases use this tag. Resolve the duplicate drafts before publishing.")
+    return matches[0] if matches else None
 
 
 def main():
@@ -47,17 +59,21 @@ def main():
     run("git", "fetch", "origin", "main")
     if run("git", "rev-parse", "HEAD") != run("git", "rev-parse", "origin/main"):
         raise ValueError("main changed during verification. Run the release workflow again on the latest commit.")
-    endpoint = f"repos/{REPOSITORY}/releases/tags/{tag}"
-    existing = subprocess.run(["gh", "api", endpoint], cwd=ROOT, text=True, capture_output=True)
-    if existing.returncode:
-        if "404" not in existing.stderr:
-            raise RuntimeError("Could not inspect the existing GitHub release.")
+    head = run("git", "rev-parse", "HEAD")
+    release = find_release(tag)
+    if release is None:
         run("gh", "release", "create", tag, "--repo", REPOSITORY, "--target", run("git", "rev-parse", "HEAD"),
             "--draft", "--prerelease", "--title", f"Theme Song Volume {version} Preview",
             "--notes-file", str(ROOT / ".github/releases/theme-song-volume.md"))
-    release = json.loads(run("gh", "api", endpoint))
+        release = find_release(tag)
+    if release is None:
+        raise ValueError("The created release draft could not be found.")
     if not release["prerelease"]:
         raise ValueError("An existing stable release will not be changed.")
+    if release["draft"] and release["target_commitish"] != head:
+        if release["assets"]:
+            raise ValueError("An older draft already contains assets; it will not be overwritten.")
+        run("gh", "release", "edit", tag, "--repo", REPOSITORY, "--target", head)
     asset = next((item for item in release["assets"] if item["name"] == archive.name), None)
     if asset:
         with tempfile.TemporaryDirectory() as directory:
