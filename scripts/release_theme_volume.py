@@ -46,6 +46,15 @@ def create_draft(tag, version, head):
         return json.loads(run("gh", "api", "--method", "POST", f"repos/{REPOSITORY}/releases", "--input", str(path)))
 
 
+def publish_draft(release_id, tag, head):
+    result = json.loads(run("gh", "api", "--method", "PATCH", f"repos/{REPOSITORY}/releases/{release_id}",
+        "-f", f"tag_name={tag}", "-f", f"target_commitish={head}",
+        "-F", "draft=false", "-F", "prerelease=true", "-f", "make_latest=false"))
+    if result.get("tag_name") != tag or result.get("draft") is not False or result.get("prerelease") is not True:
+        raise ValueError("The published release has an unexpected tag or preview status. Catalog update stopped.")
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true", help="Validate local release inputs without publishing")
@@ -88,7 +97,8 @@ def main():
     if release["draft"] and release["target_commitish"] != head:
         if release["assets"]:
             raise ValueError("An older draft already contains assets; it will not be overwritten.")
-        run("gh", "api", "--method", "PATCH", release_endpoint, "-f", f"target_commitish={head}")
+        run("gh", "api", "--method", "PATCH", release_endpoint,
+            "-f", f"tag_name={tag}", "-f", f"target_commitish={head}", "-F", "draft=true", "-F", "prerelease=true")
     asset = next((item for item in release["assets"] if item["name"] == archive.name), None)
     if asset:
         with tempfile.TemporaryDirectory() as directory:
@@ -101,8 +111,7 @@ def main():
         upload_url = f"https://uploads.github.com/repos/{REPOSITORY}/releases/{release_id}/assets?name={quote(archive.name)}"
         run("gh", "api", "--method", "POST", upload_url, "--header", "Content-Type: application/zip", "--input", str(archive))
     if release["draft"]:
-        run("gh", "api", "--method", "PATCH", release_endpoint,
-            "-F", "draft=false", "-F", "prerelease=true", "-f", "make_latest=false")
+        publish_draft(release_id, tag, head)
     url = f"https://github.com/{REPOSITORY}/releases/download/{tag}/{archive.name}"
     entries_path = ROOT / "plugins/theme-song-volume/versions.json"
     entries = json.loads(entries_path.read_text(encoding="utf-8"))

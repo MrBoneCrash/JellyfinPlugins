@@ -12,6 +12,19 @@ SPEC.loader.exec_module(release)
 
 
 class ReleaseDiscoveryTests(unittest.TestCase):
+    def test_publication_preserves_the_explicit_release_tag(self):
+        expected = {"tag_name": "preview-tag", "draft": False, "prerelease": True}
+        with patch.object(release, "run", return_value=json.dumps(expected)) as run:
+            self.assertEqual(release.publish_draft(123, "preview-tag", "tested-commit"), expected)
+            self.assertIn("tag_name=preview-tag", run.call_args.args)
+            self.assertIn("target_commitish=tested-commit", run.call_args.args)
+
+    def test_wrong_published_tag_stops_catalog_publication(self):
+        wrong = {"tag_name": "untagged-example", "draft": False, "prerelease": True}
+        with patch.object(release, "run", return_value=json.dumps(wrong)):
+            with self.assertRaisesRegex(ValueError, "unexpected tag"):
+                release.publish_draft(123, "preview-tag", "tested-commit")
+
     def test_creation_returns_id_without_a_second_lookup(self):
         created = {"id": 123, "draft": True, "prerelease": True}
 
