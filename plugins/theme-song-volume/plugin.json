@@ -1,0 +1,8 @@
+{
+  "guid": "bc7977c8-ec09-4da4-8030-97c7e5a21491",
+  "name": "Theme Song Volume",
+  "overview": "Keep library theme songs at a comfortable volume.",
+  "description": "Set a default theme-song volume and individual song overrides without changing source files or normal playback volume. Settings follow your Jellyfin account. Requires File Transformation 3.x and a compatible server-hosted Jellyfin Web client.",
+  "owner": "MrBoneCrash",
+  "category": "General"
+}

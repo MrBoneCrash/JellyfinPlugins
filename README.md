@@ -5,8 +5,9 @@ catalog. Add this repository once to access the plugins and their future updates
 
 ## Available plugins
 
-No plugins have been published yet. Released plugins will be listed here with
-their features, supported Jellyfin versions, and setup instructions.
+| Plugin | Features | Requirements | Status |
+| --- | --- | --- | --- |
+| [Theme Song Volume](plugins/theme-song-volume/README.md) | Default theme-song volume and individual song overrides, without changing audio files. | Jellyfin 12.3, File Transformation 3.x, compatible server-hosted Web client. | Preview; build or use a CI artifact. Not yet in the catalog. |
 
 ## Installation
 
@@ -24,7 +25,8 @@ their features, supported Jellyfin versions, and setup instructions.
 6. Restart Jellyfin to load the plugin. Check the plugin's documentation for any
    additional configuration.
 
-The catalog will remain empty until the first plugin is released.
+The catalog will remain empty until the first plugin is released. For the Theme
+Song Volume preview, follow its [installation guide](plugins/theme-song-volume/README.md).
 
 ## Updates
 

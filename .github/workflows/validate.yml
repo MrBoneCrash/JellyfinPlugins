@@ -20,3 +20,35 @@ jobs:
         run: python -m unittest discover -s tests -v
       - name: Validate published manifest
         run: python scripts/catalog.py build --check
+  theme-song-volume:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Test server plugin and build Release assembly
+        run: dotnet test plugins/theme-song-volume/tests/ThemeSongVolume.Tests.csproj -c Release
+      - name: Test playback isolation and cleanup
+        run: node --test plugins/theme-song-volume/tests/playback.test.cjs
+      - name: Install browser test dependencies
+        working-directory: plugins/theme-song-volume
+        run: npm ci
+      - name: Install test browser
+        working-directory: plugins/theme-song-volume
+        run: npx playwright install --with-deps chromium
+      - name: Verify browser controls and removal
+        working-directory: plugins/theme-song-volume
+        run: npm run test:browser
+      - name: Package plugin
+        run: python scripts/package_theme_volume.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ThemeSongVolume-preview
+          path: dist/ThemeSongVolume-1.0.0.0.zip

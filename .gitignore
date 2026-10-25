@@ -7,3 +7,7 @@ dist/
 *.zip
 .DS_Store
 Thumbs.db
+.research/
+.tools/
+node_modules/
+TestResults/
