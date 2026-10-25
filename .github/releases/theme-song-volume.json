@@ -1,6 +1,7 @@
 {
-  "version": "0.1.0.1",
+  "version": "0.1.0.2",
   "targetAbi": "12.3.0.0",
   "prerelease": true,
-  "revision": 2
+  "revision": 1,
+  "changelog": "[PREVIEW] Fix missing theme-volume controls on Jellyfin Web 12.3 detail pages and share File Transformation's index.html pipeline with other UI plugins. Requires Jellyfin 12.3 and File Transformation 3.x."
 }

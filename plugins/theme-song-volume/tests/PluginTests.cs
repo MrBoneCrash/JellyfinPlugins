@@ -105,6 +105,26 @@ public sealed class PluginTests : IDisposable
     }
 
     [Fact]
+    public void HtmlInsideJavaScriptDoesNotReceiveAnHtmlScriptTag()
+    {
+        const string source = "const template = '<html><head></head><body></body></html>';";
+        Assert.Equal(source, WebTransformation.Apply(source));
+    }
+
+    [Fact]
+    public void IndexRegistrationSharesTheExactPipelineUsedByOtherPlugins()
+    {
+        var registrations = FrontendIntegration.CreateRegistrations();
+        var index = Assert.Single(registrations, item => item.Value<string>("fileNamePattern") == "index.html");
+        Assert.Equal(Plugin.PluginId, index.Value<string>("id"));
+        Assert.Equal(2, registrations.Select(item => item.Value<string>("id")).Distinct().Count());
+        var scripts = Assert.Single(registrations, item => item != index);
+        var regex = new System.Text.RegularExpressions.Regex(scripts.Value<string>("fileNamePattern")!);
+        Assert.Matches(regex, "htmlAudioPlayer-plugin.hash.chunk.js");
+        Assert.DoesNotMatch(regex, "index.html");
+    }
+
+    [Fact]
     public void InstalledPluginInfoCanBeEnumeratedAndSerialized()
     {
         var paths = DispatchProxy.Create<IApplicationPaths, TestPaths>();

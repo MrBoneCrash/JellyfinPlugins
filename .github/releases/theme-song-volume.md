@@ -1,9 +1,13 @@
-# Theme Song Volume 0.1.0.1 Preview
+# Theme Song Volume 0.1.0.2 Preview
 
-Fixes the plugin dashboard failing to load after installing version 0.1.0.0.
-The plugin now initializes its assembly path, data path, and version before
-Jellyfin reads its metadata. A regression test reproduces the original
-`GET /Plugins` / `BasePlugin.get_CanUninstall()` failure and verifies the fix.
+Fixes theme-volume controls not appearing on Jellyfin Web 12.3 detail pages.
+The controls now mount below the actual `mainDetailButtons` element, and the
+HTML loader shares File Transformation's literal `index.html` pipeline so other
+UI plugins do not shadow its registration. The client-script URL includes the
+plugin version, and JavaScript containing HTML strings is left intact.
+
+The plugin's administration page remains informational. Open a movie or series
+whose theme song is playing, then expand **Theme volume** below the play buttons.
 
 ## Requirements
 
@@ -19,7 +23,7 @@ restart Jellyfin. Reload the client after the restart.
 
 If the old plugin prevents the dashboard from loading, stop Jellyfin, move the
 old Theme Song Volume installation folder out of the plugins directory, and
-extract this release ZIP into `Theme Song Volume_0.1.0.1` inside the plugins
+extract this release ZIP into `Theme Song Volume_0.1.0.2` inside the plugins
 directory. Start Jellyfin again. Keep the plugin configurations directory to
 retain your saved theme-volume preferences.
 

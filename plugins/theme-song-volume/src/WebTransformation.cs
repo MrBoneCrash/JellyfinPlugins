@@ -27,13 +27,15 @@ public static class WebTransformation
     public static string Apply(string contents)
     {
         if (contents.Contains(Marker, StringComparison.Ordinal)) return contents;
-        if (contents.Contains("</head>", StringComparison.OrdinalIgnoreCase) &&
-            contents.Contains("<html", StringComparison.OrdinalIgnoreCase))
+        var start = contents.TrimStart();
+        if ((start.StartsWith("<!doctype html", StringComparison.OrdinalIgnoreCase) ||
+            start.StartsWith("<html", StringComparison.OrdinalIgnoreCase)) &&
+            contents.Contains("</head>", StringComparison.OrdinalIgnoreCase))
         {
             var index = contents.IndexOf('>', contents.IndexOf("<head", StringComparison.OrdinalIgnoreCase)) + 1;
             if (index == 0) return contents;
             return contents.Insert(index,
-                $"<!-- {Marker} --><script defer src=\"../ThemeSongVolume/client.js\" data-mbc-theme-volume=\"1\"></script>");
+                $"<!-- {Marker} --><script defer src=\"../ThemeSongVolume/client.js?v={typeof(WebTransformation).Assembly.GetName().Version}\" data-mbc-theme-volume=\"1\"></script>");
         }
         try
         {

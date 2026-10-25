@@ -38,7 +38,7 @@ const assert = require('node:assert/strict');
                 <style>body{background:#181818;color:#eee;font:16px system-ui;margin:24px}button{padding:8px}</style>
                 <script>window.ApiClient={getCurrentUserId:()=> 'fixture-user',accessToken:()=> 'fixture-only-token',serverAddress:()=> 'http://theme-volume.test'};</script>
                 <script defer src="/ThemeSongVolume/client.js"></script></head><body>
-                <main class="itemDetailPage"><h1>Example Series</h1><div class="detailButtons"><button>Play</button></div></main>
+                <main id="itemDetailPage" class="page libraryPage itemDetailPage"><h1>Example Series</h1><div class="detailRibbon"><div class="mainDetailButtons focuscontainer-x"><button>Play</button></div></div></main>
                 </body></html>` });
         });
         await page.goto('http://theme-volume.test/web/index.html');
@@ -55,7 +55,9 @@ const assert = require('node:assert/strict');
             // Theme playback may begin before its initial settings request completes.
             window.__MrBoneCrashThemeVolumeV1.prepare(window.audio, window.song);
         });
-        await page.waitForSelector('#mbc-theme-volume');
+        await page.waitForSelector('#mbc-theme-volume', { timeout: 5000 });
+        assert.equal(await page.locator('.detailButtons').count(), 0);
+        assert.equal(await page.locator('.mainDetailButtons + #mbc-theme-volume').count(), 1);
         await page.waitForFunction(() => window.audio.volume === 0.2);
         assert.equal(await page.locator('#mbc-theme-volume').getAttribute('open'), null);
         await page.locator('summary').click();

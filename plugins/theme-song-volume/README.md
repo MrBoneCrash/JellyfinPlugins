@@ -48,7 +48,7 @@ ZIP artifact from the corresponding successful GitHub Actions run.
 
 2. Install a File Transformation 3.x release compatible with Jellyfin 12.3.
 3. Extract `Jellyfin.Plugin.ThemeSongVolume.dll` from the preview ZIP into a new
-   `Theme Song Volume_0.1.0.1` folder inside your Jellyfin plugins directory.
+   `Theme Song Volume_0.1.0.2` folder inside your Jellyfin plugins directory.
 4. Restart Jellyfin and reload the client. The Jellyfin plugin dashboard also
    contains a **Theme Song Volume** information page.
 
@@ -69,6 +69,9 @@ Keep the plugin configurations directory in place to retain your saved settings.
 No changes to File Transformation or any other plugin are needed for this fix.
 
 ## Use
+
+The plugin page in Jellyfin's administration dashboard is informational. The
+volume controls are on the movie or series detail page, not in that dashboard.
 
 1. Open a movie or series that has a theme song and let it start playing.
 2. Expand **Theme volume** below its playback buttons.
@@ -117,11 +120,11 @@ node --test plugins/theme-song-volume/tests/playback.test.cjs
 python scripts/package_theme_volume.py
 ```
 
-The package is written to `dist/ThemeSongVolume-0.1.0.1.zip`. It contains the plugin
+The package is written to `dist/ThemeSongVolume-0.1.0.2.zip`. It contains the plugin
 assembly and this guide; Jellyfin's assemblies are not bundled.
 The package filename is derived from the version declared in the C# project.
-For this preview, use `0.1.0.1` in the catalog and
-`theme-song-volume-v0.1.0.1` as the GitHub release tag. Mark the GitHub release as a
+For this preview, use `0.1.0.2` in the catalog and
+`theme-song-volume-v0.1.0.2` as the GitHub release tag. Mark the GitHub release as a
 pre-release; Jellyfin itself does not support a separate pre-release flag.
 
 For browser checks:

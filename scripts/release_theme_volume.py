@@ -41,6 +41,9 @@ def main():
         raise ValueError("Release version must have four numeric components.")
     if request.get("prerelease") is not True:
         raise ValueError("This workflow only publishes previews.")
+    changelog = request.get("changelog")
+    if not isinstance(changelog, str) or not changelog.strip():
+        raise ValueError("The release request must include a non-empty changelog.")
     project_version = ET.parse(ROOT / "plugins/theme-song-volume/src/ThemeSongVolume.csproj").findtext("./PropertyGroup/Version")
     if project_version != version:
         raise ValueError("Release request and project versions differ.")
@@ -96,7 +99,7 @@ def main():
     else:
         run("python", "scripts/catalog.py", "add-release", "theme-song-volume", "--version", version,
             "--target-abi", request["targetAbi"], "--zip", str(archive), "--url", url, "--changelog",
-            "[PREVIEW] Fix plugin discovery and GET /Plugins failing in BasePlugin.get_CanUninstall(). Requires Jellyfin 12.3 and File Transformation 3.x.")
+            changelog)
     run("python", "scripts/catalog.py", "build")
     run("python", "scripts/catalog.py", "build", "--check")
     run("git", "config", "user.name", "github-actions[bot]")

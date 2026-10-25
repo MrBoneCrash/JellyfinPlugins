@@ -194,7 +194,7 @@
     function mount() {
         if (stopped || !loaded || !songs.length || panel?.isConnected) return;
         const view = document.querySelector('.itemDetailPage:not(.hide), .detailPage:not(.hide)');
-        const anchor = view?.querySelector('.detailButtons');
+        const anchor = view?.querySelector('.mainDetailButtons, .detailButtons');
         if (!anchor) return;
         removePanel();
         panel = element('details', null, 'mbc-theme-volume');

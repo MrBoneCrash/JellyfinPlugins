@@ -19,6 +19,22 @@ public sealed class FrontendIntegration(ILogger<FrontendIntegration> logger) : B
 {
     private static Type? _interface;
     private static readonly object Gate = new();
+    public static readonly Guid ScriptTransformationId = Guid.Parse("53c544da-d30d-4a36-98c1-624e0aa3a0b9");
+
+    public static JObject[] CreateRegistrations() =>
+    [
+        Registration(Guid.Parse(Plugin.PluginId), "index.html"),
+        Registration(ScriptTransformationId, @"(?:^|[/\\])[^/\\]+\.js$")
+    ];
+
+    private static JObject Registration(Guid id, string pattern) => new()
+    {
+        ["id"] = id.ToString(),
+        ["fileNamePattern"] = pattern,
+        ["callbackAssembly"] = typeof(WebTransformation).Assembly.FullName,
+        ["callbackClass"] = typeof(WebTransformation).FullName,
+        ["callbackMethod"] = nameof(WebTransformation.Transform)
+    };
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -36,16 +52,11 @@ public sealed class FrontendIntegration(ILogger<FrontendIntegration> logger) : B
                     lock (Gate)
                     {
                         if (!plugin.Active || stoppingToken.IsCancellationRequested) return;
-                        api.GetMethod("RegisterTransformation")!.Invoke(null,
-                        [new JObject
-                        {
-                            ["id"] = Plugin.PluginId,
-                            ["fileNamePattern"] = @"(?:^|[/\\])(?:index\.html|[^/\\]+\.js)$",
-                            ["callbackAssembly"] = typeof(WebTransformation).Assembly.FullName,
-                            ["callbackClass"] = typeof(WebTransformation).FullName,
-                            ["callbackMethod"] = nameof(WebTransformation.Transform)
-                        }]);
                         _interface = api;
+                        // File Transformation 3.x gives exact keys priority over regexes.
+                        // Share the literal index.html pipeline with other UI plugins.
+                        foreach (var registration in CreateRegistrations())
+                            api.GetMethod("RegisterTransformation")!.Invoke(null, [registration]);
                         plugin.IntegrationReady = true;
                     }
                     logger.LogInformation("Theme Song Volume registered its reversible web integration.");
@@ -53,6 +64,7 @@ public sealed class FrontendIntegration(ILogger<FrontendIntegration> logger) : B
                 }
                 catch (Exception error) when (error is TargetInvocationException or InvalidOperationException)
                 {
+                    Unregister();
                     logger.LogDebug(error, "Theme Song Volume is waiting for File Transformation.");
                 }
             }
@@ -66,8 +78,11 @@ public sealed class FrontendIntegration(ILogger<FrontendIntegration> logger) : B
         lock (Gate)
         {
             if (Plugin.Instance is { } plugin) plugin.IntegrationReady = false;
-            try { _interface?.GetMethod("RemoveTransformation")?.Invoke(null, [Guid.Parse(Plugin.PluginId)]); }
-            catch (Exception error) when (error is TargetInvocationException or ObjectDisposedException) { /* Server is stopping. */ }
+            foreach (var id in new[] { Guid.Parse(Plugin.PluginId), ScriptTransformationId })
+            {
+                try { _interface?.GetMethod("RemoveTransformation")?.Invoke(null, [id]); }
+                catch (Exception error) when (error is TargetInvocationException or ObjectDisposedException) { /* Server is stopping. */ }
+            }
             _interface = null;
         }
     }
