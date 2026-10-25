@@ -1,115 +1,113 @@
 # Jellyfin Plugin Repository
 
-Ein gemeinsames Repository zum Organisieren und Veröffentlichen eigener
-Jellyfin-Plugins. Jellyfin liest den Katalog aus `manifest.json`; die installierbaren
-ZIP-Dateien werden als GitHub-Release-Assets bereitgestellt.
+A shared repository for organizing and publishing your own Jellyfin plugins.
+Jellyfin reads the catalog from `manifest.json`; installable ZIP files are hosted
+as GitHub release assets.
 
-Der Katalog ist anfangs bewusst leer (`[]`). Neue Plugins erscheinen erst darin,
-wenn mindestens eine Version mit einem echten Download eingetragen wurde.
+The catalog starts empty (`[]`). Plugins appear once at least one version with
+a real download has been registered.
 
-## Struktur
+## Structure
 
 ```text
-manifest.json                  # Öffentlicher Jellyfin-Katalog (generiert)
-plugins/<plugin-id>/plugin.json # Stammdaten je Plugin
+manifest.json                  # Public Jellyfin catalog (generated)
+plugins/<plugin-id>/plugin.json # Metadata for each plugin
 plugins/<plugin-id>/versions.json
-plugins/<plugin-id>/src/        # Optional: Plugin-Quellcode
-scripts/catalog.py             # Verwaltung und Validierung
-tests/                         # Tests für das Katalogwerkzeug
-.github/workflows/validate.yml  # Automatische Prüfung bei Push und Pull Request
+plugins/<plugin-id>/src/        # Optional: plugin source code
+scripts/catalog.py             # Catalog management and validation
+tests/                         # Catalog tooling tests
+.github/workflows/validate.yml  # Automatic checks on pushes and pull requests
 ```
 
-Voraussetzung für die Verwaltung: Python 3.11 oder neuer, keine Zusatzpakete.
-Für die Entwicklung von C#-Plugins zusätzlich das zur jeweiligen Jellyfin-Version
-passende .NET SDK und die entsprechenden Jellyfin-Pakete verwenden.
+Catalog management requires Python 3.11 or later, with no additional packages.
+Developing C# plugins also requires the .NET SDK and Jellyfin packages appropriate
+for the targeted Jellyfin version.
 
-## Neues Plugin anlegen
+## Add a plugin
 
-Im Repository-Ordner ausführen (PowerShell, eine Zeile):
+Run this command from the repository directory (PowerShell, on one line):
 
 ```powershell
-python scripts/catalog.py init mein-plugin --name "Mein Plugin" --owner "DEIN-GITHUB-NAME" --overview "Kurze Zusammenfassung" --description "Beschreibung der Funktionen" --category "General"
+python scripts/catalog.py init my-plugin --name "My Plugin" --owner "YOUR-GITHUB-NAME" --overview "Short summary" --description "Description of the features" --category "General"
 ```
 
-Das Werkzeug erzeugt `plugin.json` und eine leere `versions.json`. Die erzeugte
-GUID muss auch die ID des C#-Plugins sein und über alle Versionen gleich bleiben.
-Für ein bestehendes Plugin die vorhandene ID mit `--guid "DEINE-PLUGIN-GUID"`
-übernehmen. Optional kann `imageUrl` in `plugin.json` auf ein öffentlich erreichbares
-Bild verweisen. Namen, Texte und Kategorie lassen sich dort bearbeiten.
+The tool creates `plugin.json` and an empty `versions.json`. The generated GUID
+must also be the ID of the C# plugin and must remain unchanged across versions.
+For an existing plugin, supply its current ID using `--guid "YOUR-PLUGIN-GUID"`.
+Optionally, add `imageUrl` to `plugin.json` to reference a publicly accessible
+image. You can edit the name, descriptions, and category in that file.
 
-Der eigentliche Plugin-Code kann unter `plugins/mein-plugin/src/` oder in einem
-eigenen Repository liegen. Als Ausgangspunkt für C#-Plugins dient das
-[offizielle Jellyfin-Plugin-Template](https://github.com/jellyfin/jellyfin-plugin-template).
+Plugin source code can live in `plugins/my-plugin/src/` or in a separate repository.
+Use the [official Jellyfin plugin template](https://github.com/jellyfin/jellyfin-plugin-template)
+as a starting point for C# plugins.
 
-## Version veröffentlichen
+## Publish a version
 
-1. Plugin für die gewünschte Jellyfin-Version bauen. Die Plugin-DLL und benötigte
-   zusätzliche Dateien direkt in ein ZIP packen, ohne umschließenden Unterordner.
-   Jellyfin-eigene Assemblies nicht als Plugin-Abhängigkeiten mitliefern.
-2. Auf GitHub ein Release erstellen, beispielsweise mit dem Tag
-   `mein-plugin-v1.0.0.0`, und das ZIP als Asset hochladen. Kein automatisch
-   erzeugtes Quellcode-ZIP verwenden.
-3. Exakt dieses ZIP lokal erfassen. Die Angaben unten sind Platzhalter:
+1. Build the plugin for the intended Jellyfin version. Package the plugin DLL and
+   any required additional files directly in a ZIP, without an enclosing directory.
+   Do not bundle Jellyfin's own assemblies as plugin dependencies.
+2. Create a GitHub release, for example with the tag `my-plugin-v1.0.0.0`, and
+   upload the ZIP as an asset. Do not use GitHub's automatically generated source ZIP.
+3. Register that exact ZIP locally. The following values are placeholders:
 
 ```powershell
-python scripts/catalog.py add-release mein-plugin --version "1.0.0.0" --target-abi "10.11.0.0" --zip "dist/MeinPlugin-1.0.0.0.zip" --url "https://github.com/DEIN-NAME/DEIN-REPO/releases/download/mein-plugin-v1.0.0.0/MeinPlugin-1.0.0.0.zip" --changelog "Erste Version"
+python scripts/catalog.py add-release my-plugin --version "1.0.0.0" --target-abi "10.11.0.0" --zip "dist/MyPlugin-1.0.0.0.zip" --url "https://github.com/YOUR-NAME/YOUR-REPO/releases/download/my-plugin-v1.0.0.0/MyPlugin-1.0.0.0.zip" --changelog "Initial release"
 python scripts/catalog.py build
 python scripts/catalog.py build --check
 ```
 
-`targetAbi` ist die erforderliche Jellyfin-Server-ABI und muss zum gebauten Plugin
-passen; der Beispielwert ist keine automatisch festgestellte Kompatibilität.
-Plugin-Version und ABI werden vierstellig angegeben. Die MD5-Prüfsumme wird aus
-dem lokalen ZIP berechnet, der Zeitstempel in UTC gesetzt. Das Werkzeug prüft die
-ZIP-Struktur und Metadaten, lädt aber die Download-URL nicht zur Kontrolle ab.
+`targetAbi` is the required Jellyfin server ABI and must match the built plugin;
+the example value does not indicate automatically verified compatibility.
+Use four-part values for both the plugin version and ABI. The MD5 checksum is
+calculated from the local ZIP, and the timestamp is recorded in UTC. The tool
+checks the ZIP structure and metadata but does not download the URL for verification.
 
-Anschließend `plugins/` und `manifest.json` committen und pushen. Neue Versionen
-werden ergänzt, ältere bleiben erhalten; neueste Versionen stehen zuerst.
-Ein bereits veröffentlichtes ZIP nicht nachträglich ersetzen, da sonst die
-Prüfsumme nicht mehr stimmt. Für Korrekturen eine neue Version veröffentlichen.
+Then commit and push `plugins/` and `manifest.json`. New versions are added while
+older versions are retained, with the newest versions listed first. Do not replace
+an already published ZIP, as this would invalidate its checksum. Publish a new
+version for corrections.
 
-## Auf GitHub bereitstellen
+## Host on GitHub
 
-Ein leeres, öffentliches GitHub-Repository erstellen. Für den ersten Push:
+Create an empty, public GitHub repository. For the initial push:
 
 ```powershell
 git add .
 git commit -m "Initialize Jellyfin plugin repository"
 git branch -M main
-git remote add origin https://github.com/DEIN-NAME/DEIN-REPO.git
+git remote add origin https://github.com/YOUR-NAME/YOUR-REPO.git
 git push -u origin main
 ```
 
-Diese Befehle sind für das hier vorbereitete Repository ohne Remote vorgesehen.
-Die GitHub Actions prüfen Metadaten, Katalog und Werkzeugtests. Sie bauen keine
-C#-Plugins und erstellen keine Releases; deren Build hängt vom jeweiligen Projekt ab.
-GitHub Pages ist für den Katalog nicht erforderlich.
+These commands assume the prepared local repository has no remote configured.
+GitHub Actions validates metadata, the catalog, and tooling tests. It does not
+build C# plugins or create releases; those builds depend on each plugin project.
+GitHub Pages is not required for the catalog.
 
-## In Jellyfin hinzufügen
+## Add the repository to Jellyfin
 
-Unter **Dashboard → Plugins → Repositories** ein Repository mit frei wählbarem
-Namen und folgender URL hinzufügen:
+Under **Dashboard > Plugins > Repositories**, add a repository with a name of your
+choice and the following URL:
 
 ```text
-https://raw.githubusercontent.com/DEIN-NAME/DEIN-REPO/main/manifest.json
+https://raw.githubusercontent.com/YOUR-NAME/YOUR-REPO/main/manifest.json
 ```
 
-`DEIN-NAME` und `DEIN-REPO` ersetzen; bei einem anderen Standardbranch auch `main`
-anpassen. Manifest und Release-Assets müssen für den Jellyfin-Server ohne Anmeldung
-erreichbar sein. Anschließend das Plugin im Katalog installieren und Jellyfin
-neu starten. Solange der Katalog leer ist, werden keine Plugins angezeigt.
+Replace `YOUR-NAME` and `YOUR-REPO`; adjust `main` if you use a different default
+branch. The manifest and release assets must be accessible to the Jellyfin server
+without authentication. Install the plugin from the catalog, then restart Jellyfin.
+No plugins will be displayed while the catalog is empty.
 
-## Lokal prüfen
+## Run local checks
 
 ```powershell
 python -m unittest discover -s tests -v
 python scripts/catalog.py build --check
 ```
 
-Das generierte Manifest nicht von Hand pflegen, sondern die Dateien unter
-`plugins/` bearbeiten und anschließend `build` ausführen.
-Vor der Veröffentlichung eine passende Lizenz für die eigenen Plugins ergänzen.
+To update the generated manifest, edit the files under `plugins/` and run `build`.
+Choose and add an appropriate license for your plugins before publishing them.
 
-Format und Repository-Einbindung orientieren sich an der
-[Jellyfin-Dokumentation](https://jellyfin.org/docs/general/server/plugins/) und der
-[offiziellen Manifest-Beschreibung](https://jellyfin.org/posts/plugin-updates/).
+The catalog format and repository setup follow the
+[Jellyfin documentation](https://jellyfin.org/docs/general/server/plugins/) and the
+[official manifest description](https://jellyfin.org/posts/plugin-updates/).
