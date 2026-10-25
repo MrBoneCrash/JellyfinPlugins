@@ -35,6 +35,8 @@ jobs:
         with:
           python-version: '3.11'
       - name: Test server plugin and build Release assembly
+        env:
+          THEME_VOLUME_SETTINGS_OUTPUT: ${{ runner.temp }}/theme-volume-settings.json
         run: dotnet test plugins/theme-song-volume/tests/ThemeSongVolume.Tests.csproj -c Release
       - name: Test playback isolation and cleanup
         run: node --test plugins/theme-song-volume/tests/playback.test.cjs
@@ -46,6 +48,8 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Verify browser controls and removal
         working-directory: plugins/theme-song-volume
+        env:
+          THEME_VOLUME_SETTINGS_RESPONSE: ${{ runner.temp }}/theme-volume-settings.json
         run: npm run test:browser
       - name: Package plugin
         run: python scripts/package_theme_volume.py

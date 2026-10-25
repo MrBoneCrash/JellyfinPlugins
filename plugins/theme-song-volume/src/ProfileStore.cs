@@ -1,10 +1,13 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Jellyfin.Plugin.ThemeSongVolume;
 
 public sealed record VolumeProfile
 {
+    [JsonPropertyName("volume")]
     public int Volume { get; init; } = 25;
+    [JsonPropertyName("overrides")]
     public Dictionary<string, int> Overrides { get; init; } = [];
 
     public VolumeProfile Validated()

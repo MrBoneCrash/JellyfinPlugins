@@ -48,7 +48,7 @@ ZIP artifact from the corresponding successful GitHub Actions run.
 
 2. Install a File Transformation 3.x release compatible with Jellyfin 12.3.
 3. Extract `Jellyfin.Plugin.ThemeSongVolume.dll` from the preview ZIP into a new
-   `Theme Song Volume_0.1.0.2` folder inside your Jellyfin plugins directory.
+   `Theme Song Volume_0.1.0.3` folder inside your Jellyfin plugins directory.
 4. Restart Jellyfin and reload the client. The Jellyfin plugin dashboard also
    contains a **Theme Song Volume** information page.
 
@@ -120,11 +120,11 @@ node --test plugins/theme-song-volume/tests/playback.test.cjs
 python scripts/package_theme_volume.py
 ```
 
-The package is written to `dist/ThemeSongVolume-0.1.0.2.zip`. It contains the plugin
+The package is written to `dist/ThemeSongVolume-0.1.0.3.zip`. It contains the plugin
 assembly and this guide; Jellyfin's assemblies are not bundled.
 The package filename is derived from the version declared in the C# project.
-For this preview, use `0.1.0.2` in the catalog and
-`theme-song-volume-v0.1.0.2` as the GitHub release tag. Mark the GitHub release as a
+For this preview, use `0.1.0.3` in the catalog and
+`theme-song-volume-v0.1.0.3` as the GitHub release tag. Mark the GitHub release as a
 pre-release; Jellyfin itself does not support a separate pre-release flag.
 
 For browser checks:
@@ -141,6 +141,19 @@ settings validation and account separation, owned-data cleanup, response-transfo
 guards, duplicate initialization, responsive controls, and browser cleanup. Browser
 tests use a simulated server and real HTML media elements; they do not establish
 compatibility with a real Jellyfin installation or native clients.
+
+The browser checks include Jellyfin's bubbling legacy `pagehide` events and a
+settings response generated with `JsonDefaults.PascalCaseOptions`. Version 0.1.0.3
+was also checked locally with the reported 15 Ultrachromic CSS modules, including
+`title_banner-logo.css`, at desktop and mobile widths. This does not establish
+compatibility with every Ultrachromic configuration or future stylesheet changes.
+
+For troubleshooting, this read-only console command reports runtime readiness
+without disclosing authentication tokens or user identifiers:
+
+```javascript
+window.__MrBoneCrashThemeVolumeV1?.diagnostics()
+```
 
 The web hooks are based on the
 [Jellyfin Web 12.3 theme player](https://github.com/jellyfin/jellyfin-web/blob/v12.3/src/components/themeMediaPlayer.js)

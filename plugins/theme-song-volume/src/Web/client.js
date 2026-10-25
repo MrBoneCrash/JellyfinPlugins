@@ -265,7 +265,7 @@
                 }
             }, save);
         const songLabel = element('label', 'Song');
-        const select = element('select', null, 'emby-select-withcolor');
+        const select = element('select', null, 'emby-select emby-select-withcolor');
         select.setAttribute('aria-label', 'Theme song');
         for (const [index, song] of songs.entries()) {
             const option = element('option', song.Name || `Theme song ${index + 1}`);
@@ -322,7 +322,8 @@
       #mbc-theme-volume [data-body] { padding: .5em 1em; border-inline-start: 2px solid currentColor; }
       #mbc-theme-volume label { display: block; margin-block: 1em; }
       #mbc-theme-volume input[type=range], #mbc-theme-volume select { display: block; width: 100%; margin-top: .6em; box-sizing: border-box; }
-      #mbc-theme-volume select { padding: .5em; }
+      #mbc-theme-volume select { padding: .5em; color: inherit; background-color: rgba(0,0,0,.18); }
+      #mbc-theme-volume option { color: CanvasText; background-color: Canvas; }
       #mbc-theme-volume p { font-size: .9em; opacity: .8; }
       #mbc-theme-volume .mbc-theme-volume-toggle { display: flex; align-items: center; gap: .6em; }
     `;
@@ -341,6 +342,10 @@
     }
 
     const bridge = {
+        diagnostics() {
+            return Object.freeze({ settingsLoaded: loaded, playerReady, themeSongCount: songs.length,
+                controlsCreated: !!panel?.isConnected, connectedToServer: !!api() });
+        },
         audioReady() { if (!playerReady) { playerReady = true; mount(); render(); } },
         themes(items) {
             if (stopped) return items;
@@ -365,7 +370,11 @@
         if (pendingPlayback?.audio === event.target) pendingPlayback = null;
         playback.release(event.target);
     }, { capture: true, signal: abort.signal });
-    root.addEventListener('pagehide', dispose, { signal: abort.signal });
+    root.addEventListener('pagehide', event => {
+        // Legacy Jellyfin views emit bubbling pagehide events during SPA navigation.
+        // Only a real window departure should tear down the integration.
+        if (event.target === root) dispose();
+    }, { signal: abort.signal });
     observer = new MutationObserver(mount);
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
     const heartbeat = setInterval(() => { void refresh(); }, 15000);

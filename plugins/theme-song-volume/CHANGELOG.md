@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.0.3 — Preview
+
+- Keep the integration alive when Jellyfin's legacy views emit a bubbling
+  `pagehide` event during normal navigation. Clean up only when the window leaves.
+- Pin the `volume` and `overrides` JSON property names so the API works with
+  Jellyfin's PascalCase serializer as well as the browser's expected contract.
+- Run browser checks with a response serialized using Jellyfin's actual JSON defaults.
+- Test the reported Ultrachromic modules, preserve readable song selectors, and
+  expose a read-only runtime diagnostic snapshot without tokens or user IDs.
+
 ## 0.1.0.2 — Preview
 
 - Mount the controls below Jellyfin Web 12.3's actual `mainDetailButtons` element.

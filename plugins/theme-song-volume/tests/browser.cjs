@@ -11,7 +11,17 @@ const assert = require('node:assert/strict');
         const page = await browser.newPage();
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
-        let profile = { volume: 25, overrides: {} };
+        let profile = process.env.THEME_VOLUME_SETTINGS_RESPONSE
+            ? JSON.parse(fs.readFileSync(process.env.THEME_VOLUME_SETTINGS_RESPONSE, 'utf8')).profile
+            : { volume: 25, overrides: {} };
+        const cssModules = ['fixes.css', 'jf_font.css', 'base.css', 'accentlist.css', 'rounding.css',
+            'smallercast.css', 'episodelist_episodes_compactlist.css', 'header_header_transparent.css',
+            'login_login_frame.css', 'fields_fields_border.css', 'cornerindicator_indicator_floating.css',
+            'type_colorful.css', 'titlepage_title_banner-logo.css', 'progress_floating.css', 'effects_hoverglow.css'];
+        const customCss = process.env.THEME_VOLUME_CSS_DIR
+            ? cssModules.map(name => fs.readFileSync(path.join(process.env.THEME_VOLUME_CSS_DIR, name), 'utf8')).join('\n') +
+                '\n.backdropImage{filter:blur(4px) saturate(110%) contrast(110%) brightness(65%)}:root{--rounding:12px;--accent:52,227,5}.backgroundContainer{background-color:rgba(var(--accent),0)!important}'
+            : '';
         let removed = false;
         let writes = 0;
         let firstRead = true;
@@ -34,8 +44,9 @@ const assert = require('node:assert/strict');
                 return route.fulfill({ json: route.request().method() === 'GET'
                     ? { profile, integrationReady: true } : profile });
             }
-            return route.fulfill({ contentType: 'text/html', body: `<!DOCTYPE html><html><head>
+            return route.fulfill({ contentType: 'text/html', body: `<!DOCTYPE html><html class="layout-desktop"><head>
                 <style>body{background:#181818;color:#eee;font:16px system-ui;margin:24px}button{padding:8px}</style>
+                <style>${customCss}</style>
                 <script>window.ApiClient={getCurrentUserId:()=> 'fixture-user',accessToken:()=> 'fixture-only-token',serverAddress:()=> 'http://theme-volume.test'};</script>
                 <script defer src="/ThemeSongVolume/client.js"></script></head><body>
                 <main id="itemDetailPage" class="page libraryPage itemDetailPage"><h1>Example Series</h1><div class="detailRibbon"><div class="mainDetailButtons focuscontainer-x"><button>Play</button></div></div></main>
@@ -59,6 +70,12 @@ const assert = require('node:assert/strict');
         assert.equal(await page.locator('.detailButtons').count(), 0);
         assert.equal(await page.locator('.mainDetailButtons + #mbc-theme-volume').count(), 1);
         await page.waitForFunction(() => window.audio.volume === 0.2);
+        // Jellyfin dispatches a bubbling pagehide from legacy views during SPA navigation.
+        await page.evaluate(() => document.querySelector('#itemDetailPage').dispatchEvent(
+            new CustomEvent('pagehide', { bubbles: true })));
+        await page.waitForTimeout(200);
+        assert.equal(await page.evaluate(() => !!window.__MrBoneCrashThemeVolumeV1), true,
+            'Navigating between Jellyfin views must not dispose the plugin runtime');
         assert.equal(await page.locator('#mbc-theme-volume').getAttribute('open'), null);
         await page.locator('summary').click();
         await page.evaluate(() => window.__MrBoneCrashThemeVolumeV1.prepare(window.audio, window.song));
@@ -80,6 +97,7 @@ const assert = require('node:assert/strict');
         await page.keyboard.press('ArrowLeft');
         await page.keyboard.press('Tab');
         await page.setViewportSize({ width: 390, height: 844 });
+        await page.evaluate(() => { document.documentElement.className = 'layout-mobile'; });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
         if (process.env.THEME_VOLUME_SCREENSHOT)
             await page.screenshot({ path: process.env.THEME_VOLUME_SCREENSHOT });
@@ -105,6 +123,13 @@ const assert = require('node:assert/strict');
         assert.equal(await page.evaluate(() => localStorage.length), 0);
         assert.ok(writes > 0);
         assert.deepEqual(errors, []);
+        // Native window navigation still performs cleanup.
+        removed = false;
+        await page.reload();
+        await page.waitForFunction(() => window.__MrBoneCrashThemeVolumeV1);
+        await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
+        await page.waitForFunction(() => !window.__MrBoneCrashThemeVolumeV1);
+        assert.equal(await page.locator('#mbc-theme-volume-style').count(), 0);
         console.log('Browser checks passed: sliders, zero override, inheritance, keyboard, narrow layout, reset, duplicate injection, playback scope, and removal.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -6,6 +6,7 @@ using MediaBrowser.Common.Configuration;
 using MediaBrowser.Common.Plugins;
 using MediaBrowser.Model.Plugins;
 using System.Text.Json;
+using Jellyfin.Extensions.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -14,6 +15,20 @@ public sealed class PluginTests : IDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), "theme-volume-test-" + Guid.NewGuid().ToString("N"));
     public void Dispose() { if (Directory.Exists(_directory)) Directory.Delete(_directory, true); }
+
+    [Fact]
+    public void ProfileContractUsesBrowserFieldNamesWithJellyfinJsonDefaults()
+    {
+        var json = JsonSerializer.Serialize(new { profile = new VolumeProfile(), integrationReady = true }, JsonDefaults.PascalCaseOptions);
+        var output = Environment.GetEnvironmentVariable("THEME_VOLUME_SETTINGS_OUTPUT");
+        if (output is not null) File.WriteAllText(output, json);
+        using var document = JsonDocument.Parse(json);
+        var profile = document.RootElement.GetProperty("profile");
+        Assert.Equal(25, profile.GetProperty("volume").GetInt32());
+        Assert.Equal(JsonValueKind.Object, profile.GetProperty("overrides").ValueKind);
+        var saved = JsonSerializer.Deserialize<VolumeProfile>("{\"volume\":40,\"overrides\":{}}", JsonDefaults.PascalCaseOptions)!;
+        Assert.Equal(40, saved.Volume);
+    }
 
     [Fact]
     public void ProfilesAreIsolatedAndDefaultsDoNotCreateFiles()
