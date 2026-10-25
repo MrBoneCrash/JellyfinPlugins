@@ -16,4 +16,4 @@ appear in the catalog yet. Source code may also live in a separate repository,
 with only catalog metadata managed here.
 
 Create new entries using `python scripts/catalog.py init`; see the
-[repository instructions](../README.md).
+[maintenance guide](../docs/maintaining.md).
