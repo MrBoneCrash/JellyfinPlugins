@@ -1,0 +1,41 @@
+name: Release Theme Song Volume preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/releases/theme-song-volume.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-theme-song-volume
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    uses: ./.github/workflows/validate.yml
+    permissions:
+      contents: read
+
+  release:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ThemeSongVolume-preview
+          path: dist
+      - name: Publish preview and update catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/release_theme_volume.py

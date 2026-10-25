@@ -69,10 +69,29 @@ version for corrections.
 
 ## Hosting
 
+### Publish a Theme Song Volume preview with GitHub Actions
+
+Update the plugin's project version and `.github/releases/theme-song-volume.json`
+to the same four-part version, and write the English release notes in
+`.github/releases/theme-song-volume.md`. Commit the changes to `main`.
+
+The release workflow runs when the request JSON changes. It runs the repository
+checks, builds the plugin, publishes the tested ZIP as a GitHub pre-release, and
+then commits the download URL and checksum to the catalog. Existing published
+assets are never overwritten. The workflow uses GitHub's scoped job token;
+no local GitHub CLI login or additional repository secret is needed.
+
+If `main` changes while verification is running, the release stops before
+publication. Run **Release Theme Song Volume preview** again from GitHub Actions
+on the latest `main` revision. A new request version is required for a new release.
+
+Jellyfin has no dedicated pre-release field in its manifest. Keep the preview
+status visible in the plugin description and version changelog.
+
 The public repository is [MrBoneCrash/JellyfinPlugins](https://github.com/MrBoneCrash/JellyfinPlugins).
 Commit and push catalog updates to its `main` branch. GitHub Actions validates
-metadata, the catalog, and tooling tests. It does not build C# plugins or create
-releases; those builds depend on each plugin project. GitHub Pages is not required.
+metadata, the catalog, and tooling tests. Theme Song Volume also has a plugin build
+and the release workflow described above. GitHub Pages is not required.
 
 The public catalog URL is:
 

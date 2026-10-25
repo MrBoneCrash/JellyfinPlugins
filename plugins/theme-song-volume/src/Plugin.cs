@@ -14,6 +14,14 @@ public sealed class Plugin : BasePlugin, IHasWebPages
 
     public Plugin(IApplicationPaths paths)
     {
+        // The non-generic BasePlugin does not initialize assembly metadata.
+        // Jellyfin needs these fields during discovery and when listing plugins.
+        var assembly = GetType().Assembly;
+        var assemblyName = assembly.GetName();
+        SetAttributes(
+            assembly.Location,
+            Path.Combine(paths.PluginsPath, assemblyName.Name!),
+            assemblyName.Version!);
         Profiles = new ProfileStore(Path.Combine(paths.PluginConfigurationsPath, "MrBoneCrash.ThemeSongVolume"));
         Instance = this;
     }

@@ -36,9 +36,9 @@ the controls remain disabled and explain the limitation.
 
 ## Install the preview
 
-This plugin has not yet been published in the repository catalog. Build it locally
-using the commands below, or download the ZIP artifact from a successful GitHub
-Actions run once the code has been pushed.
+Published previews can be installed from the repository catalog. For a local fix
+that has not yet been released, build it using the commands below or download the
+ZIP artifact from the corresponding successful GitHub Actions run.
 
 1. Add the File Transformation repository to Jellyfin:
 
@@ -48,9 +48,25 @@ Actions run once the code has been pushed.
 
 2. Install a File Transformation 3.x release compatible with Jellyfin 12.3.
 3. Extract `Jellyfin.Plugin.ThemeSongVolume.dll` from the preview ZIP into a new
-   `Theme Song Volume_0.1.0.0` folder inside your Jellyfin plugins directory.
+   `Theme Song Volume_0.1.0.1` folder inside your Jellyfin plugins directory.
 4. Restart Jellyfin and reload the client. The Jellyfin plugin dashboard also
    contains a **Theme Song Volume** information page.
+
+### Recover from the 0.1.0.0 plugin-list error
+
+Version 0.1.0.0 did not initialize the assembly metadata required by Jellyfin.
+This can prevent the entire plugin list from loading, with a
+`BasePlugin.get_CanUninstall()` error for `GET /Plugins`. Version 0.1.0.1 fixes it.
+
+If the dashboard cannot load plugins, stop Jellyfin before replacing the plugin:
+
+1. Move the old **Theme Song Volume** installation directory out of Jellyfin's
+   plugins directory to a backup location. Do not leave duplicate copies in plugins.
+2. Extract the fixed ZIP into `Theme Song Volume_0.1.0.1` under the plugins directory.
+3. Start Jellyfin and reload the plugin dashboard.
+
+Keep the plugin configurations directory in place to retain your saved settings.
+No changes to File Transformation or any other plugin are needed for this fix.
 
 ## Use
 
@@ -101,11 +117,11 @@ node --test plugins/theme-song-volume/tests/playback.test.cjs
 python scripts/package_theme_volume.py
 ```
 
-The package is written to `dist/ThemeSongVolume-0.1.0.0.zip`. It contains the plugin
+The package is written to `dist/ThemeSongVolume-0.1.0.1.zip`. It contains the plugin
 assembly and this guide; Jellyfin's assemblies are not bundled.
 The package filename is derived from the version declared in the C# project.
-For this preview, use `0.1.0.0` in the catalog and
-`theme-song-volume-v0.1.0.0` as the GitHub release tag. Mark the GitHub release as a
+For this preview, use `0.1.0.1` in the catalog and
+`theme-song-volume-v0.1.0.1` as the GitHub release tag. Mark the GitHub release as a
 pre-release; Jellyfin itself does not support a separate pre-release flag.
 
 For browser checks:

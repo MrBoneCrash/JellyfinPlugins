@@ -3,6 +3,9 @@ using Xunit;
 using System.Reflection;
 using System.Security.Claims;
 using MediaBrowser.Common.Configuration;
+using MediaBrowser.Common.Plugins;
+using MediaBrowser.Model.Plugins;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
@@ -99,6 +102,31 @@ public sealed class PluginTests : IDisposable
         Assert.Contains("src='other.js'", result);
         Assert.Contains("../ThemeSongVolume/client.js", result);
         Assert.Equal(result, WebTransformation.Apply(result));
+    }
+
+    [Fact]
+    public void InstalledPluginInfoCanBeEnumeratedAndSerialized()
+    {
+        var paths = DispatchProxy.Create<IApplicationPaths, TestPaths>();
+        ((TestPaths)(object)paths).Directory = _directory;
+        var plugin = new Plugin(paths);
+        var assembly = typeof(Plugin).Assembly;
+        var local = new LocalPlugin(Path.GetDirectoryName(assembly.Location)!, true, new PluginManifest
+        {
+            Id = plugin.Id,
+            Name = plugin.Name,
+            Version = assembly.GetName().Version!.ToString()
+        }) { Instance = plugin };
+
+        // GET /Plugins lazily enumerates LocalPlugin.GetPluginInfo during serialization.
+        var json = JsonSerializer.Serialize(new[] { local }.Select(item => item.GetPluginInfo()));
+        using var document = JsonDocument.Parse(json);
+        Assert.Equal(1, document.RootElement.GetArrayLength());
+        Assert.Equal(assembly.Location, plugin.AssemblyFilePath);
+        Assert.Equal(assembly.GetName().Version, plugin.Version);
+        Assert.Equal(Path.Combine(_directory, assembly.GetName().Name!), plugin.DataFolderPath);
+        Assert.Equal(plugin.Id, local.GetPluginInfo().Id);
+        Assert.False(Directory.Exists(_directory));
     }
 
     [Fact]
