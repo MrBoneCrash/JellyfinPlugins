@@ -12,6 +12,21 @@ SPEC.loader.exec_module(release)
 
 
 class ReleaseDiscoveryTests(unittest.TestCase):
+    def test_creation_returns_id_without_a_second_lookup(self):
+        created = {"id": 123, "draft": True, "prerelease": True}
+
+        def create(*args):
+            self.assertEqual(args[:4], ("gh", "api", "--method", "POST"))
+            payload = json.loads(Path(args[-1]).read_text(encoding="utf-8"))
+            self.assertTrue(payload["draft"])
+            self.assertTrue(payload["prerelease"])
+            self.assertEqual(payload["target_commitish"], "tested-commit")
+            return json.dumps(created)
+
+        with patch.object(release, "run", side_effect=create) as run:
+            self.assertEqual(release.create_draft("preview-tag", "0.1.0.2", "tested-commit"), created)
+            self.assertEqual(run.call_count, 1)
+
     def test_finds_draft_without_a_published_tag_across_pages(self):
         draft = {"id": 2, "tag_name": "theme-song-volume-v0.1.0.1", "draft": True}
         pages = [[{"id": 1, "tag_name": "other-version", "draft": False}], [draft]]

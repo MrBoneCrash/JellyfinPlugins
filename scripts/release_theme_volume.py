@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+from urllib.parse import quote
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -29,6 +30,20 @@ def find_release(tag):
     if len(matches) > 1:
         raise ValueError("Multiple releases use this tag. Resolve the duplicate drafts before publishing.")
     return matches[0] if matches else None
+
+
+def create_draft(tag, version, head):
+    payload = {
+        "tag_name": tag, "target_commitish": head,
+        "name": f"Theme Song Volume {version} Preview",
+        "body": (ROOT / ".github/releases/theme-song-volume.md").read_text(encoding="utf-8"),
+        "draft": True, "prerelease": True,
+    }
+    with tempfile.TemporaryDirectory() as directory:
+        path = Path(directory) / "release.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        # Use the creation response directly; draft lookup can lag behind writes.
+        return json.loads(run("gh", "api", "--method", "POST", f"repos/{REPOSITORY}/releases", "--input", str(path)))
 
 
 def main():
@@ -65,18 +80,15 @@ def main():
     head = run("git", "rev-parse", "HEAD")
     release = find_release(tag)
     if release is None:
-        run("gh", "release", "create", tag, "--repo", REPOSITORY, "--target", run("git", "rev-parse", "HEAD"),
-            "--draft", "--prerelease", "--title", f"Theme Song Volume {version} Preview",
-            "--notes-file", str(ROOT / ".github/releases/theme-song-volume.md"))
-        release = find_release(tag)
-    if release is None:
-        raise ValueError("The created release draft could not be found.")
+        release = create_draft(tag, version, head)
+    release_id = int(release["id"])
+    release_endpoint = f"repos/{REPOSITORY}/releases/{release_id}"
     if not release["prerelease"]:
         raise ValueError("An existing stable release will not be changed.")
     if release["draft"] and release["target_commitish"] != head:
         if release["assets"]:
             raise ValueError("An older draft already contains assets; it will not be overwritten.")
-        run("gh", "release", "edit", tag, "--repo", REPOSITORY, "--target", head)
+        run("gh", "api", "--method", "PATCH", release_endpoint, "-f", f"target_commitish={head}")
     asset = next((item for item in release["assets"] if item["name"] == archive.name), None)
     if asset:
         with tempfile.TemporaryDirectory() as directory:
@@ -86,9 +98,11 @@ def main():
     else:
         if not release["draft"]:
             raise ValueError("A published release is missing its ZIP; repair it explicitly.")
-        run("gh", "release", "upload", tag, str(archive), "--repo", REPOSITORY)
+        upload_url = f"https://uploads.github.com/repos/{REPOSITORY}/releases/{release_id}/assets?name={quote(archive.name)}"
+        run("gh", "api", "--method", "POST", upload_url, "--header", "Content-Type: application/zip", "--input", str(archive))
     if release["draft"]:
-        run("gh", "release", "edit", tag, "--repo", REPOSITORY, "--draft=false", "--prerelease", "--latest=false")
+        run("gh", "api", "--method", "PATCH", release_endpoint,
+            "-F", "draft=false", "-F", "prerelease=true", "-f", "make_latest=false")
     url = f"https://github.com/{REPOSITORY}/releases/download/{tag}/{archive.name}"
     entries_path = ROOT / "plugins/theme-song-volume/versions.json"
     entries = json.loads(entries_path.read_text(encoding="utf-8"))
