@@ -1,6 +1,6 @@
 # Verification
 
-This is an unpublished preview targeting Jellyfin 12.3.0 and File Transformation
+This is a preview targeting Jellyfin 12.3.0 and File Transformation
 3.x. Verified locally on Windows on 2026-10-26:
 
 - Eleven .NET tests passed, along with 13 repository tooling tests and catalog validation.

@@ -7,10 +7,12 @@ Abyss or Jellyfin plugin.
 
 ## Installation
 
-This preview is not yet published in the plugin catalog. Build the plugin and
-create its ZIP using the commands below, extract it to a dedicated
-`plugins/AbyssTheme_0.2.0.0` folder in your Jellyfin data directory, then restart.
-Do not install this development ZIP over a different plugin's directory.
+Add the [MrBoneCrash plugin repository](https://github.com/MrBoneCrash/JellyfinPlugins#installation) to Jellyfin,
+then install **Abyss Theme 0.2.0.0** from the plugin catalog. This is a preview;
+check the requirements and verification limits below before installing.
+For manual installation, extract the release ZIP to a dedicated
+`plugins/AbyssTheme_0.2.0.0` folder in your Jellyfin data directory. Do not extract
+it over a different plugin's directory.
 
 1. Install **File Transformation 3.x** (verified integration API: 3.0.2.0).
 2. Install Abyss Theme and restart Jellyfin.

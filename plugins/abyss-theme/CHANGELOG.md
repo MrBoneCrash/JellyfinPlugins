@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0.0 (unpublished preview)
+## 0.2.0.0 (preview)
 
 - Add administrator-only configuration with opt-in upstream CSS updates and manual checks.
 - Download all assets at one immutable revision; validate and persist complete bundles atomically.
