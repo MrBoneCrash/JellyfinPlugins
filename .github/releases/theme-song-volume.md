@@ -1,16 +1,17 @@
-# Theme Song Volume 0.1.0.4 Preview
+# Theme Song Volume 0.1.0.5 Preview
 
-Fixes missing theme-volume controls with the official Jellyfin Web 12.3 bundles.
-The audio hook now recognizes Webpack's renamed volume-saving function, and
-settings requests use the MediaBrowser Authorization header accepted by the server.
-Also prevents repeated attenuation when Jellyfin reuses its audio player after a fade.
+Fixes empty or intermittent theme-volume controls in Jellyfin Media Player with
+Qt WebEngine 5.15.2 / Chromium 83. The installed client reproduced
+`body.replaceChildren is not a function`, which aborted rendering and the theme
+playback hook. The panel now clears its content using a compatible DOM operation.
 
-Verified on an isolated real Jellyfin 12.3.0 server with File Transformation 3.0.2.0
-and Windows Chrome using synthetic media. Checks cover visible controls, default
-volume, individual mute, persistence, navigation, normal movie volume, reset,
-uninstall cleanup, and unchanged source media/web files. The reported Ultrachromic
-stylesheet modules were also checked locally. GitHub Actions runs the real-server
-test before publishing this release.
+Global listeners are also removed explicitly on disposal, so cleanup works on
+engines that ignore the `addEventListener` signal option.
+
+The previous release fails on the actual Qt 5.15.2 engine; the corrected script
+passes controls, song dropdown, save, cached-view navigation, and removal checks.
+Actions now gates publication on this exact-engine test, the existing browser
+checks, and the real Jellyfin 12.3.0 / File Transformation 3.0.2.0 playback test.
 
 ## Updating
 
@@ -19,8 +20,9 @@ Open a movie or series whose theme song is playing, then expand **Theme volume**
 below the playback buttons. The administration page remains informational.
 
 Requires Jellyfin Server 12.3 and File Transformation 3.x compatible with your
-server. Native Windows and Android clients have not been device-tested; native
-playback and separately bundled web interfaces are not supported automatically.
+server. This verifies the Windows UI fix; it does not establish native-player
+volume support. Native playback and separately bundled web interfaces remain
+unsupported. Android playback remains unverified.
 
 This GitHub release is a pre-release. Jellyfin catalogs have no separate
 pre-release flag; the manifest identifies it as a preview in its text.

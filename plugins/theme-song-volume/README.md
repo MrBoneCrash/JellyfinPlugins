@@ -24,7 +24,7 @@ of 20%. An override replaces the default multiplier; it is not multiplied twice.
 | Client | Scope |
 | --- | --- |
 | Jellyfin Web served by this server | Verified with official Jellyfin 12.3.0, File Transformation 3.0.2.0, and Chrome on Windows using real playback. Other browser engines remain unverified. |
-| Windows clients | Can work when they load this server's web interface and use its HTML audio player. Native playback paths and bundled web interfaces are not supported. Not device-tested. |
+| Windows clients | Empty controls were reproduced in the installed Jellyfin Media Player with Qt WebEngine 5.15.2 / Chromium 83. Fixed UI behavior is verified on that exact engine. Volume control still requires the server-hosted web interface and HTML audio player; native playback paths and bundled web interfaces remain unsupported. |
 | Android app | Can work for theme songs played by the server-hosted web interface using its HTML audio player. Native/external players are not supported. Not device-tested. |
 | Android TV, native clients, casting, separately hosted Web | No automatic support. Their own players/UI do not load these extensions. |
 
@@ -120,11 +120,11 @@ node --test plugins/theme-song-volume/tests/playback.test.cjs
 python scripts/package_theme_volume.py
 ```
 
-The package is written to `dist/ThemeSongVolume-0.1.0.4.zip`. It contains the plugin
+The package is written to `dist/ThemeSongVolume-0.1.0.5.zip`. It contains the plugin
 assembly and this guide; Jellyfin's assemblies are not bundled.
 The package filename is derived from the version declared in the C# project.
-For this preview, use `0.1.0.4` in the catalog and
-`theme-song-volume-v0.1.0.4` as the GitHub release tag. Mark the GitHub release as a
+For this preview, use `0.1.0.5` in the catalog and
+`theme-song-volume-v0.1.0.5` as the GitHub release tag. Mark the GitHub release as a
 pre-release; Jellyfin itself does not support a separate pre-release flag.
 
 For browser checks:
@@ -162,7 +162,23 @@ was also checked locally with the reported 15 Ultrachromic CSS modules, includin
 `title_banner-logo.css`, at desktop and mobile widths. This does not establish
 compatibility with every Ultrachromic configuration or future stylesheet changes.
 The real-server test for 0.1.0.4 also verified the reported stylesheet modules on
-Windows Chrome at desktop width. Native Windows and Android apps remain untested.
+Windows Chrome at desktop width. Native Windows and Android playback remains unverified.
+
+Version 0.1.0.5 was also tested on the exact Qt WebEngine 5.15.2 / Chromium 83
+engine used by the inspected Windows client. The previous release reproduces
+`body.replaceChildren is not a function`; the corrected build passes rendering,
+song selection, saving, cached-view navigation, and cleanup. This verifies the UI
+compatibility fix, not native-player volume control or an installed-client update.
+To repeat this separate DOM test with Python 3.9:
+
+```powershell
+python -m pip install --only-binary=:all: PyQt5==5.15.2 PyQtWebEngine==5.15.2
+python plugins/theme-song-volume/tests/qt-webengine.py
+```
+
+It creates a hidden, disposable web page using a loopback fixture. It does not
+read or modify the installed client's profile, credentials, or settings. Actions
+runs it before publishing, alongside the real-server playback test.
 
 For troubleshooting, this read-only console command reports runtime readiness
 without disclosing authentication tokens or user identifiers:

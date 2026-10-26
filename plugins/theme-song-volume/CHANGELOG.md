@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.0.5 — Preview
+
+- Fix empty or intermittent theme-volume controls in Jellyfin Media Player with
+  Qt WebEngine 5.15.2 / Chromium 83. Clear the panel with a supported DOM operation
+  instead of `replaceChildren()`, which aborted rendering and the theme-play hook.
+- Remove global listeners explicitly on disposal. Chromium 83 does not support
+  the `addEventListener` signal option used for automatic cleanup.
+- Add browser regression checks for the missing API and ignored signal option,
+  plus an actual Qt WebEngine 5.15.2 test for controls, save, navigation and removal.
+- Keep native playback support separate from verified UI compatibility.
+
 ## 0.1.0.4 — Preview
 
 - Recognize the actual Webpack export alias used to save audio volume in the

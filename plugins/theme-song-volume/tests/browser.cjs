@@ -9,6 +9,29 @@ const assert = require('node:assert/strict');
         ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
     try {
         const page = await browser.newPage();
+        if (process.env.THEME_VOLUME_LEGACY_DOM === '1') {
+            await page.addInitScript(() => {
+                // Match the missing API and ignored signal option in JMP's
+                // Qt WebEngine 5.15.2 / Chromium 83 without a global polyfill.
+                delete Element.prototype.replaceChildren;
+                window.ownedListeners = [];
+                const add = EventTarget.prototype.addEventListener;
+                const remove = EventTarget.prototype.removeEventListener;
+                EventTarget.prototype.addEventListener = function (name, handler, options) {
+                    if (this === document || this === window) {
+                        if (['viewshow', 'emptied', 'pagehide'].includes(name))
+                            window.ownedListeners.push({ target: this, name, handler });
+                    }
+                    return add.call(this, name, handler, typeof options === 'object'
+                        ? { capture: !!options.capture, once: !!options.once, passive: !!options.passive } : options);
+                };
+                EventTarget.prototype.removeEventListener = function (name, handler, options) {
+                    window.ownedListeners = window.ownedListeners.filter(listener =>
+                        listener.target !== this || listener.name !== name || listener.handler !== handler);
+                    return remove.call(this, name, handler, options);
+                };
+            });
+        }
         const errors = [];
         page.on('pageerror', error => errors.push(error.message));
         let profile = process.env.THEME_VOLUME_SETTINGS_RESPONSE
@@ -121,6 +144,9 @@ const assert = require('node:assert/strict');
         assert.equal(await page.locator('#mbc-theme-volume-style').count(), 0);
         assert.equal(await page.evaluate(() => window.fetch === window.originalFetch && HTMLMediaElement.prototype.play === window.originalPlay), true);
         assert.equal(await page.evaluate(() => localStorage.length), 0);
+        if (process.env.THEME_VOLUME_LEGACY_DOM === '1')
+            assert.equal(await page.evaluate(() => window.ownedListeners.length), 0,
+                'Uninstall must remove global listeners even without signal-option support');
         assert.ok(writes > 0);
         assert.deepEqual(errors, []);
         // Native window navigation still performs cleanup.

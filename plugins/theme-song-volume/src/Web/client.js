@@ -67,6 +67,12 @@
     const scriptUrl = new URL(document.currentScript.src);
     const endpoint = new URL('./settings', scriptUrl).href;
     const abort = new AbortController();
+    const listeners = [];
+    function listen(target, name, handler, capture = false) {
+        // Qt WebEngine 5.15.2 does not support the addEventListener signal option.
+        target.addEventListener(name, handler, capture);
+        listeners.push(() => target.removeEventListener(name, handler, capture));
+    }
     const playback = createPlayback();
     let knownThemes = new WeakSet();
     let songs = [];
@@ -262,7 +268,8 @@
             if (status) status.textContent = playerReady ? statusText : 'This audio player is not supported. Theme volume is unchanged.';
             return;
         }
-        body.replaceChildren();
+        // Jellyfin Media Player's Chromium 83 predates replaceChildren().
+        body.textContent = '';
         body.append(element('p', 'Theme songs only. Your regular playback volume remains the master volume.'));
         slider(body, 'Default volume', profile.volume, false,
             value => {
@@ -343,6 +350,7 @@
         stopped = true;
         generation++;
         abort.abort();
+        listeners.splice(0).forEach(remove => remove());
         clearInterval(heartbeat);
         observer?.disconnect();
         removePanel(); style.remove(); playback.dispose();
@@ -374,16 +382,16 @@
         dispose
     };
     root[key] = bridge;
-    document.addEventListener('viewshow', () => { void refresh(); mount(); }, { signal: abort.signal });
-    document.addEventListener('emptied', event => {
+    listen(document, 'viewshow', () => { void refresh(); mount(); });
+    listen(document, 'emptied', event => {
         if (pendingPlayback?.audio === event.target) pendingPlayback = null;
         playback.release(event.target);
-    }, { capture: true, signal: abort.signal });
-    root.addEventListener('pagehide', event => {
+    }, true);
+    listen(root, 'pagehide', event => {
         // Legacy Jellyfin views emit bubbling pagehide events during SPA navigation.
         // Only a real window departure should tear down the integration.
         if (event.target === root) dispose();
-    }, { signal: abort.signal });
+    });
     observer = new MutationObserver(mount);
     observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
     const heartbeat = setInterval(() => { void refresh(); }, 15000);
