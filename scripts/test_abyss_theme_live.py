@@ -80,6 +80,10 @@ def main():
                 request('/System/Info/Public')
                 if initial_setup:
                     request('/Startup/User')
+                else:
+                    # Static Web/public status can respond before the authenticated
+                    # API is ready on a restarted Windows portable server.
+                    request('/System/Info')
                 return
             except (OSError, ValueError):
                 time.sleep(1)
