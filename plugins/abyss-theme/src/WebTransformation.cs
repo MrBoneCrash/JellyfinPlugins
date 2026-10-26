@@ -28,6 +28,6 @@ public static class WebTransformation
         var index = heads[0].Index + heads[0].Length;
         return contents.Insert(index, "\n<style " + Marker + " media=\"not all\">\n/* Abyss by Om Gupta (AumGupta), MIT. https://github.com/AumGupta/abyss-jellyfin */\n" +
             (Plugin.Instance is { Active: true } plugin ? plugin.Themes.Css() : ThemeStore.Bundled.Css) +
-            "\n</style>\n<script defer src=\"../AbyssTheme/client.js?v=0.2.0.0\" data-mbc-abyss-runtime=\"1\"></script>\n");
+            "\n</style>\n<script defer src=\"../AbyssTheme/client.js?v=0.3.0.0\" data-mbc-abyss-runtime=\"1\"></script>\n");
     }
 }

@@ -16,7 +16,8 @@ public sealed class UpdateTests : IDisposable
         var store = new ThemeStore(_directory);
         ThemeStore.Validate(ThemeStore.Bundled);
         Assert.False(store.Snapshot().State.Settings.AutomaticUpdates);
-        Assert.DoesNotContain("data-abyss-override", store.Css());
+        Assert.DoesNotContain("data-abyss-override=\"je\"", store.Css());
+        Assert.DoesNotContain("data-abyss-override=\"mbe\"", store.Css());
         store.Settings(new(true, true, false));
         Assert.Contains("data-abyss-override=\"je\"", store.Css());
         Assert.DoesNotContain("data-abyss-override=\"mbe\"", store.Css());
@@ -32,7 +33,7 @@ public sealed class UpdateTests : IDisposable
         Assert.False(restarted.Snapshot().State.Settings.AutomaticUpdates);
         restarted.Reset();
         Assert.Null(restarted.Snapshot().State.Current);
-        Assert.Equal(new ThemeSettings(), restarted.Snapshot().State.Settings);
+        Assert.Equal(JsonSerializer.Serialize(new ThemeSettings()), JsonSerializer.Serialize(restarted.Snapshot().State.Settings));
     }
 
     [Fact]
@@ -82,12 +83,22 @@ public sealed class UpdateTests : IDisposable
                 url.EndsWith("/LICENSE") ? ThemeStore.Bundled.License :
                 url.EndsWith("abyss-je.css") ? ThemeStore.Bundled.JellyfinEnhancedCss :
                 url.EndsWith("abyss-mbe.css") ? ThemeStore.Bundled.MediaBarEnhancedCss : ThemeStore.Bundled.Css;
+            if (url.EndsWith("abyss-lite.css")) text = ThemeStore.Bundled.LiteCss!;
+            if (url.EndsWith("spotlight.css")) text = ThemeStore.Bundled.SpotlightCss!;
+            if (url.EndsWith("spotlight.html")) text = ThemeStore.Bundled.SpotlightHtml!;
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(text) };
         }));
         var bundle = await ThemeUpdater.DownloadAsync(client, default);
-        Assert.Equal(5, requests.Count);
+        Assert.Equal(7, requests.Count);
         Assert.All(requests.Skip(1), url => Assert.Contains('/' + new string('a', 40) + '/', url));
         Assert.Equal(ThemeStore.Bundled.Css, bundle.Css);
+        Assert.Equal(ThemeStore.BundledRevision, bundle.SpotlightRevision);
+        Assert.DoesNotContain(requests, url => url.EndsWith("spotlight.html"));
+        requests.Clear();
+        var code = await ThemeUpdater.DownloadAsync(client, default, ThemeStore.Bundled, true);
+        Assert.Equal(8, requests.Count);
+        Assert.Equal(new string('a', 40), code.SpotlightRevision);
+        Assert.Contains(requests, url => url.EndsWith("spotlight.html"));
         using var missing = new HttpClient(new Handler(_ => new(HttpStatusCode.NotFound)));
         await Assert.ThrowsAsync<HttpRequestException>(() => ThemeUpdater.DownloadAsync(missing, default));
         using var bad = new HttpClient(new Handler(_ => new(HttpStatusCode.OK) { Content = new StringContent("<html>error</html>") }));

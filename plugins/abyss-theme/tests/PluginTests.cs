@@ -42,7 +42,7 @@ public sealed class PluginTests
         Api.Registrations[otherId] = new JObject { ["fileNamePattern"] = "index.html" };
         var plugin = NewPlugin();
         Assert.NotNull(plugin.GetPluginInfo());
-        Assert.Equal("0.2.0.0", plugin.Version.ToString());
+        Assert.Equal("0.3.0.0", plugin.Version.ToString());
         using var integration = new ThemeIntegration(NullLogger<ThemeIntegration>.Instance);
         await integration.StartAsync(default);
         await integration.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(5));

@@ -53,7 +53,8 @@ public sealed class ThemeIntegration(ILogger<ThemeIntegration> logger) : Backgro
                     {
                         _api = api;
                         register.Invoke(null, [Registration()]);
-                        logger.LogInformation("Abyss Theme registered. Theme: Om Gupta (AumGupta), MIT; https://github.com/AumGupta/abyss-jellyfin. Reload Jellyfin Web and select the Dark base theme.");
+                        if (Plugin.Instance is { } plugin) plugin.IntegrationReady = true;
+                        logger.LogInformation("Abyss Theme registered. Theme and Spotlight: Om Gupta (AumGupta), MIT; https://github.com/AumGupta/abyss-jellyfin. Configure appearance, Spotlight and layout on the plugin settings page.");
                         return;
                     }
                     catch (Exception error) when (error is TargetInvocationException or InvalidOperationException)
@@ -75,6 +76,7 @@ public sealed class ThemeIntegration(ILogger<ThemeIntegration> logger) : Backgro
     {
         lock (Gate)
         {
+            if (Plugin.Instance is { } plugin) plugin.IntegrationReady = false;
             try { _api?.GetMethod("RemoveTransformation", [typeof(Guid)])?.Invoke(null, [Guid.Parse(Plugin.PluginId)]); }
             catch (Exception error) when (error is TargetInvocationException or ObjectDisposedException) { /* Reload after restart clears the response cache. */ }
             _api = null;

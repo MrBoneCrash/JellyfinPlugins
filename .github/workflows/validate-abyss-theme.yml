@@ -33,9 +33,53 @@ jobs:
         with:
           node-version: '24'
       - run: dotnet test plugins/abyss-theme/tests/AbyssTheme.Tests.csproj -c Release
+        env:
+          ABYSS_SPOTLIGHT_ADAPTED: ${{ runner.temp }}/abyss-spotlight-adapted.html
       - run: node --test plugins/abyss-theme/tests/runtime.test.cjs
+      - run: node --check plugins/abyss-theme/src/Web/client.js
+      - run: node --check plugins/abyss-theme/src/Web/config.js
+      - run: node plugins/abyss-theme/tests/check-spotlight.cjs "${{ runner.temp }}/abyss-spotlight-adapted.html"
       - run: python scripts/package_abyss_theme.py
       - uses: actions/upload-artifact@v4
         with:
           name: AbyssTheme-preview
           path: dist/AbyssTheme-*.zip
+  live-web:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: dotnet build plugins/abyss-theme/src/AbyssTheme.csproj -c Release
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix .tools/abyss-browser --no-save --package-lock=false playwright@1.62.1
+          & ./.tools/abyss-browser/node_modules/.bin/playwright.cmd install chromium
+      - name: Download isolated Jellyfin and File Transformation distributions
+        run: |
+          New-Item -ItemType Directory -Force .tools | Out-Null
+          Invoke-WebRequest 'https://repo.jellyfin.org/files/server/windows/latest-stable/amd64/jellyfin_12.3-amd64.zip' -OutFile .tools/abyss-server.zip
+          Expand-Archive -LiteralPath .tools/abyss-server.zip -DestinationPath .tools/jellyfin-12.3
+          Invoke-WebRequest 'https://github.com/IAmParadox27/jellyfin-plugin-file-transformation/releases/download/3.0.2.0/Release-12.2.0.zip' -OutFile .tools/abyss-ft.zip
+          Expand-Archive -LiteralPath .tools/abyss-ft.zip -DestinationPath .tools/file-transformation-3.0.2
+      - name: Verify real Web configuration, Spotlight and cleanup
+        env:
+          NODE_PATH: ${{ github.workspace }}/.tools/abyss-browser/node_modules
+        run: python scripts/test_abyss_theme_live.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: AbyssTheme-live-Web-verification
+          path: |
+            dist/abyss-theme-live.json
+            .tools/abyss-live-*/config-overview.png
+            .tools/abyss-live-*/spotlight-desktop.png
+            .tools/abyss-live-*/spotlight-mobile.png

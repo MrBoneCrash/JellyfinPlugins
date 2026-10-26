@@ -124,6 +124,9 @@ def main():
                                     ('/AbyssTheme/reset', 'POST', None)]:
             denied(route, 401, method, data)
         headers.update(admin_headers)
+        server_config = request('/System/Configuration')
+        server_config['ServerName'] = 'Abyss Preview'
+        request('/System/Configuration', 'POST', server_config)
         user = request('/Users/New', 'POST', {'Name': 'abyss-viewer'})
         viewer = request('/Users/AuthenticateByName', 'POST', {'Username': 'abyss-viewer', 'Pw': ''})
         headers['Authorization'] = 'MediaBrowser Token="' + viewer['AccessToken'] + '"'
@@ -132,6 +135,36 @@ def main():
                                     ('/AbyssTheme/reset', 'POST', None)]:
             denied(route, 403, method, data)
         headers.update(admin_headers)
+        # Only synthetic media and local artwork: no user's libraries or files.
+        media = test / 'media'
+        ffmpeg = next(server.rglob('ffmpeg.exe'))
+        for title, color in [('Horizon', '0x345568'), ('Afterglow', '0x674158')]:
+            folder = media / title
+            folder.mkdir(parents=True)
+            subprocess.run([str(ffmpeg), '-v', 'error', '-f', 'lavfi', '-i', f'color=c={color}:s=640x360:r=12',
+                '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo', '-t', '120', '-c:v', 'libx264', '-preset', 'ultrafast',
+                '-crf', '35', '-c:a', 'aac', str(folder / (title + '.mp4'))], check=True)
+            subprocess.run([str(ffmpeg), '-v', 'error', '-f', 'lavfi', '-i', f'color=c={color}:s=1280x720',
+                '-frames:v', '1', str(folder / 'backdrop.jpg')], check=True)
+            (folder / (title + '.nfo')).write_text(f'<movie><title>{title}</title><year>2026</year><plot>A synthetic film used to verify Abyss Spotlight safely.</plot><rating>8.3</rating><mpaa>PG</mpaa></movie>')
+        for _ in range(60):
+            if not any(task['State'] in ['Running', 'Cancelling'] for task in request('/ScheduledTasks')):
+                break
+            time.sleep(1)
+        request('/Library/VirtualFolders?name=Abyss%20Test&collectionType=movies&refreshLibrary=true', 'POST', {
+            'LibraryOptions': {'PathInfos': [{'Path': str(media)}], 'EnableRealtimeMonitor': False,
+                              'TypeOptions': [{'Type': 'Movie', 'MetadataFetchers': [], 'ImageFetchers': []}]}})
+        for _ in range(60):
+            movies = request('/Items?Recursive=true&IncludeItemTypes=Movie')['Items']
+            if len(movies) == 2 and not any(task['State'] in ['Running', 'Cancelling'] for task in request('/ScheduledTasks')):
+                break
+            time.sleep(1)
+        else:
+            raise RuntimeError('Synthetic Spotlight library did not finish scanning.')
+        viewer_policy = request('/Users/' + user['Id'])['Policy']
+        viewer_policy['EnableAllFolders'] = False
+        viewer_policy['EnabledFolders'] = []
+        request('/Users/' + user['Id'] + '/Policy', 'POST', viewer_policy)
         plugins = request('/Plugins')
         assert any(p['Id'].replace('-', '').lower() == PLUGIN_ID.replace('-', '') for p in plugins)
         branding = request('/Branding/Configuration')
@@ -145,9 +178,10 @@ def main():
         request('/AbyssTheme/rollback', 'POST')
         assert request('/AbyssTheme/status')['settings']['automaticUpdates'] is False
         request('/AbyssTheme/reset', 'POST')
-        assert 'data-abyss-override=' not in request('/web/index.html', raw=True)
+        clean = request('/web/index.html', raw=True)
+        assert 'data-abyss-override="je"' not in clean and 'data-abyss-override="mbe"' not in clean
         print('Real Jellyfin response includes Abyss and preserves the shared pipeline.', flush=True)
-        env = {**os.environ, 'ABYSS_TEST_BASE': base, 'ABYSS_TEST_OUTPUT': str(test), 'ABYSS_TEST_TOKEN': auth['AccessToken'], 'ABYSS_TEST_PASSWORD': password}
+        env = {**os.environ, 'ABYSS_TEST_BASE': base, 'ABYSS_TEST_OUTPUT': str(test), 'ABYSS_TEST_TOKEN': auth['AccessToken'], 'ABYSS_TEST_PASSWORD': password, 'ABYSS_TEST_VIEWER_ID': user['Id']}
         subprocess.run(['node', str(ROOT / 'plugins/abyss-theme/tests/live-browser.cjs')], env=env, check=True)
         network_update_succeeded = None
         if os.environ.get('ABYSS_TEST_NETWORK_UPDATE') == '1':
@@ -192,7 +226,8 @@ def main():
             'restoredAfterIndexReplacement': True, 'uninstall': True, 'brandingPreserved': True,
             'webFilesUnchanged': True, 'themeVolumePipeline': bool(other), 'testDirectory': str(test)}
         result.update(adminOnlyEndpoints=True, optionalOverrides=True, persistedSettings=True,
-                      configurationControls=True, upstreamDownloadSucceeded=network_update_succeeded)
+                      configurationControls=True, spotlightSyntheticMedia=True, restrictedAccountIsolation=True,
+                      reversibleHomeOrder=True, runtimeCleanup=True, upstreamDownloadSucceeded=network_update_succeeded)
         (ROOT / 'dist').mkdir(exist_ok=True)
         (ROOT / 'dist/abyss-theme-live.json').write_text(json.dumps(result, indent=2))
         print(json.dumps(result, indent=2), flush=True)

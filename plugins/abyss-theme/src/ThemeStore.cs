@@ -4,11 +4,8 @@ using System.Text.Json.Serialization;
 
 namespace Jellyfin.Plugin.AbyssTheme;
 
-public sealed record ThemeSettings(
-    [property: JsonPropertyName("automaticUpdates")] bool AutomaticUpdates = false,
-    [property: JsonPropertyName("jellyfinEnhanced")] bool JellyfinEnhanced = false,
-    [property: JsonPropertyName("mediaBarEnhanced")] bool MediaBarEnhanced = false);
-public sealed record ThemeBundle(string Revision, string Css, string JellyfinEnhancedCss, string MediaBarEnhancedCss, string License);
+public sealed record ThemeBundle(string Revision, string Css, string JellyfinEnhancedCss, string MediaBarEnhancedCss, string License,
+    string? LiteCss = null, string? SpotlightCss = null, string? SpotlightHtml = null, string? SpotlightRevision = null);
 public sealed record ThemeState(ThemeSettings Settings, ThemeBundle? Current = null, ThemeBundle? Previous = null);
 
 public sealed class ThemeStore
@@ -24,7 +21,9 @@ public sealed class ThemeStore
     public static readonly ThemeBundle Bundled = new(BundledRevision,
         Resource("Jellyfin.Plugin.AbyssTheme.Web.abyss.css"),
         Resource("Jellyfin.Plugin.AbyssTheme.Web.abyss-je.css"),
-        Resource("Jellyfin.Plugin.AbyssTheme.Web.abyss-mbe.css"), Resource("Abyss.LICENSE"));
+        Resource("Jellyfin.Plugin.AbyssTheme.Web.abyss-mbe.css"), Resource("Abyss.LICENSE"),
+        Resource("Jellyfin.Plugin.AbyssTheme.Web.abyss-lite.css"), Resource("Jellyfin.Plugin.AbyssTheme.Web.spotlight.css"),
+        Resource("Jellyfin.Plugin.AbyssTheme.Web.spotlight.html"), BundledRevision);
     private readonly object _gate = new();
     private readonly string _directory;
     private readonly string _file;
@@ -43,6 +42,7 @@ public sealed class ThemeStore
             if (new FileInfo(_file).Length > 4 * 1024 * 1024) throw new InvalidDataException("Oversized saved state.");
             var state = JsonSerializer.Deserialize<ThemeState>(File.ReadAllText(_file)) ?? throw new InvalidDataException("Empty saved state.");
             if (state.Settings is null) throw new InvalidDataException("Missing saved settings.");
+            state = state with { Settings = state.Settings.Validated() };
             if (state.Current is not null) Validate(state.Current);
             if (state.Previous is not null) Validate(state.Previous);
             _state = state;
@@ -51,27 +51,37 @@ public sealed class ThemeStore
         { LoadWarning = "Saved theme state could not be loaded. Bundled CSS is active; reset settings or check the plugin's state.json file."; }
     }
 
-    public (ThemeState State, long Generation) Snapshot() { lock (_gate) return (_state, _generation); }
+    public (ThemeState State, long Generation) Snapshot() { lock (_gate) return (_state with { Settings = _state.Settings with { HomeOrder = (string[])_state.Settings.HomeOrder.Clone() } }, _generation); }
     public string Css()
     {
         lock (_gate)
         {
             var bundle = _state.Current ?? Bundled;
             // Separate style elements keep any upstream @imports valid.
-            var css = bundle.Css;
+            var css = ThemeStyles.Base(bundle, _state.Settings);
             if (_state.Settings.JellyfinEnhanced) css += "\n</style><style data-abyss-override=\"je\" media=\"not all\">\n" + bundle.JellyfinEnhancedCss;
             if (_state.Settings.MediaBarEnhanced) css += "\n</style><style data-abyss-override=\"mbe\" media=\"not all\">\n" + bundle.MediaBarEnhancedCss;
+            if (_state.Settings.LiteMode) css += "\n</style><style data-abyss-override=\"lite\" media=\"not all\">\n" + (bundle.LiteCss ?? Bundled.LiteCss);
+            css += "\n</style><style data-abyss-override=\"preferences\" media=\"not all\">\n" + ThemeStyles.Preferences(_state.Settings);
             return css;
         }
     }
-    public void Settings(ThemeSettings settings) { lock (_gate) Save(_state with { Settings = settings }); }
+    public string StyleSheet()
+    {
+        lock (_gate)
+        {
+            var bundle = _state.Current ?? Bundled;
+            return ThemeStyles.Sheet(bundle, _state.Settings);
+        }
+    }
+    public void Settings(ThemeSettings settings) { var validated = settings.Validated(); lock (_gate) Save(_state with { Settings = validated }); }
     public bool Promote(ThemeBundle bundle, long generation)
     {
         Validate(bundle);
         lock (_gate)
         {
             if (_removed || generation != _generation) return false;
-            if ((_state.Current ?? Bundled).Revision == bundle.Revision) return false;
+            if ((_state.Current ?? Bundled) == bundle) return false;
             Save(_state with { Previous = _state.Current ?? Bundled, Current = bundle });
             return true;
         }
@@ -120,6 +130,10 @@ public sealed class ThemeStore
         ValidateCss(bundle.Css, "--abyss-accent");
         ValidateCss(bundle.JellyfinEnhancedCss, "#jellyfin-enhanced-panel");
         ValidateCss(bundle.MediaBarEnhancedCss, "#slides-container");
+        if (bundle.LiteCss is not null) ValidateCss(bundle.LiteCss, "--abyss-backdrop-blur");
+        if (bundle.SpotlightCss is not null) ValidateCss(bundle.SpotlightCss, "#backdrop");
+        if (bundle.SpotlightHtml is not null) SpotlightDocument.Adapt(bundle.SpotlightHtml);
+        if (bundle.SpotlightRevision is not null && !Regex.IsMatch(bundle.SpotlightRevision, "^[a-f0-9]{40}$")) throw new ArgumentException("Invalid Spotlight revision.");
     }
     private static void ValidateCss(string css, string signature)
     {

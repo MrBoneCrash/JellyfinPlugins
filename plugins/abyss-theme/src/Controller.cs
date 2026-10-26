@@ -14,8 +14,10 @@ public sealed class Controller : ControllerBase
         Response.Headers.CacheControl = "no-store";
         if (Plugin.Instance is not { Active: true } plugin) return StatusCode(410);
         var state = plugin.Themes.Snapshot().State;
-        return Ok(new { settings = state.Settings, revision = (state.Current ?? ThemeStore.Bundled).Revision,
+        return Ok(new { settings = state.Settings, defaults = new ThemeSettings(), revision = (state.Current ?? ThemeStore.Bundled).Revision,
+            integrationReady = plugin.IntegrationReady,
             bundledRevision = ThemeStore.BundledRevision, previousRevision = state.Previous?.Revision,
+            spotlightRevision = (state.Current ?? ThemeStore.Bundled).SpotlightRevision ?? ThemeStore.BundledRevision,
             lastChecked = Plugin.Updater?.LastChecked, checking = Plugin.Updater?.Checking ?? false,
             error = Plugin.Updater?.LastError ?? plugin.Themes.LoadWarning });
     }
@@ -24,7 +26,8 @@ public sealed class Controller : ControllerBase
     public IActionResult Settings([FromBody] ThemeSettings settings)
     {
         if (Plugin.Instance is not { Active: true } plugin) return StatusCode(410);
-        plugin.Themes.Settings(settings);
+        try { plugin.Themes.Settings(settings); }
+        catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
         return NoContent();
     }
     [HttpPost("check")]
@@ -47,6 +50,29 @@ public sealed class Controller : ControllerBase
     {
         if (Plugin.Instance is not { Active: true } plugin) return StatusCode(410);
         plugin.Themes.Reset();
+        return NoContent();
+    }
+
+    [HttpPost("reset-section/{section}")]
+    public IActionResult ResetSection(string section)
+    {
+        if (Plugin.Instance is not { Active: true } plugin) return StatusCode(410);
+        var settings = plugin.Themes.Snapshot().State.Settings;
+        var defaults = new ThemeSettings();
+        var json = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(settings))!.AsObject();
+        var baseline = System.Text.Json.Nodes.JsonNode.Parse(System.Text.Json.JsonSerializer.Serialize(defaults))!.AsObject();
+        bool Included(string key) => section switch
+        {
+            "spotlight" => key.StartsWith("spotlight", StringComparison.Ordinal),
+            "updates" => key is "automaticUpdates" or "updateIntervalHours" or "updateSpotlightCode",
+            "integrations" => key is "jellyfinEnhanced" or "mediaBarEnhanced",
+            "layout" => key is "forceDark" or "showBackdrops" or "reorderHome" or "homeOrder" or "dashboardStyle" or "lockThemeSelectors",
+            "appearance" => key is "liteMode" or "externalFonts" or "shadows" or "hoverEffects" or "entranceAnimations" or "heartAnimation" or "radius" or "backdropBlur" or "glassBlur" or "fontScale" or "accent" or "indicatorColor" or "glassTint" or "font" or "motion",
+            _ => false
+        };
+        if (section is not ("spotlight" or "updates" or "integrations" or "layout" or "appearance")) return BadRequest(new { message = "Unknown settings section." });
+        foreach (var pair in baseline.Where(pair => Included(pair.Key))) json[pair.Key] = pair.Value?.DeepClone();
+        plugin.Themes.Settings(System.Text.Json.JsonSerializer.Deserialize<ThemeSettings>(json.ToJsonString())!);
         return NoContent();
     }
 }

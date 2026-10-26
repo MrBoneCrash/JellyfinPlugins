@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0.0 (preview)
+
+- Include Abyss Spotlight and Lite mode, with a redesigned responsive configuration page and local appearance preview.
+- Expose appearance, typography, performance, reversible layout, safe/full dashboard, banner sources/content, rotation, artwork, updates and recovery controls.
+- Scope Spotlight to the currently authenticated account/server; remove browser-storage and installer-notification behavior.
+- Restore temporary root palette, home order and owned backdrops on cleanup; preserve saved Jellyfin preferences and other plugins.
+- Separate optional Spotlight code updates from visual updates and retain full previous bundles for rollback.
+- Validate settings and downloaded assets; leave incompatible integrations unchanged. Native clients and real plugin-adaptation installations remain unverified.
+
 ## 0.2.0.0 (preview)
 
 - Add administrator-only configuration with opt-in upstream CSS updates and manual checks.

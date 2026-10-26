@@ -9,6 +9,7 @@ public sealed class Plugin : BasePlugin, IHasWebPages
     public const string PluginId = "de52c4ed-29ee-4e5f-b722-485dcd5503f0";
     public static Plugin? Instance { get; private set; }
     public bool Active { get; internal set; } = true;
+    public bool IntegrationReady { get; internal set; }
     public ThemeStore Themes { get; }
     public CancellationTokenSource Lifetime { get; } = new();
     public static ThemeUpdater? Updater { get; internal set; }
@@ -24,7 +25,7 @@ public sealed class Plugin : BasePlugin, IHasWebPages
 
     public override string Name => "Abyss Theme";
     public override Guid Id => Guid.Parse(PluginId);
-    public override string Description => "Abyss by Om Gupta (AumGupta), MIT licensed: https://github.com/AumGupta/abyss-jellyfin. Reapplied on server startup; requires File Transformation 3.x and server-hosted Jellyfin Web.";
+    public override string Description => "Abyss theme and Spotlight by Om Gupta (AumGupta), MIT licensed: https://github.com/AumGupta/abyss-jellyfin. Configurable appearance, Lite mode, reversible layout and optional upstream updates. Requires File Transformation 3.x and compatible server-hosted Jellyfin Web.";
 
     public IEnumerable<PluginPageInfo> GetPages() =>
     [new() { Name = "AbyssTheme", EmbeddedResourcePath = "Jellyfin.Plugin.AbyssTheme.Web.config.html" }];

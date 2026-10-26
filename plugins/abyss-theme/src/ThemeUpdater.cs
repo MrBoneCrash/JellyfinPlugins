@@ -28,7 +28,7 @@ public sealed class ThemeUpdater(ILogger<ThemeUpdater> logger) : BackgroundServi
             var snapshot = plugin.Themes.Snapshot();
             try
             {
-                var bundle = await DownloadAsync(_client, linked.Token);
+                var bundle = await DownloadAsync(_client, linked.Token, snapshot.State.Current ?? ThemeStore.Bundled, snapshot.State.Settings.UpdateSpotlightCode);
                 linked.Token.ThrowIfCancellationRequested();
                 if (plugin.Active) plugin.Themes.Promote(bundle, snapshot.Generation);
                 LastChecked = DateTimeOffset.UtcNow;
@@ -44,7 +44,7 @@ public sealed class ThemeUpdater(ILogger<ThemeUpdater> logger) : BackgroundServi
         finally { Checking = false; _check.Release(); }
     }
 
-    public static async Task<ThemeBundle> DownloadAsync(HttpClient client, CancellationToken token)
+    public static async Task<ThemeBundle> DownloadAsync(HttpClient client, CancellationToken token, ThemeBundle? previous = null, bool includeSpotlightCode = false)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token);
         timeout.CancelAfter(TimeSpan.FromSeconds(60));
@@ -56,8 +56,10 @@ public sealed class ThemeUpdater(ILogger<ThemeUpdater> logger) : BackgroundServi
         async Task<string> File(string path) => await Fetch(client, "https://raw.githubusercontent.com/AumGupta/abyss-jellyfin/" + sha + "/" + path, token);
         // Resolve main once, then fetch every asset and its license at that exact
         // immutable revision. A partial download never becomes the active bundle.
-        var downloads = await Task.WhenAll(File("abyss.css"), File("styles/abyss-je.css"), File("styles/abyss-mbe.css"), File("LICENSE"));
-        var bundle = new ThemeBundle(sha, downloads[0], downloads[1], downloads[2], downloads[3]);
+        var downloads = await Task.WhenAll(File("abyss.css"), File("styles/abyss-je.css"), File("styles/abyss-mbe.css"), File("LICENSE"), File("styles/abyss-lite.css"), File("scripts/spotlight/spotlight.css"));
+        var spotlight = includeSpotlightCode ? await File("scripts/spotlight/spotlight.html") : previous?.SpotlightHtml ?? ThemeStore.Bundled.SpotlightHtml;
+        var bundle = new ThemeBundle(sha, downloads[0], downloads[1], downloads[2], downloads[3], downloads[4], downloads[5], spotlight,
+            includeSpotlightCode ? sha : previous?.SpotlightRevision ?? ThemeStore.BundledRevision);
         ThemeStore.Validate(bundle);
         return bundle;
     }
@@ -65,7 +67,7 @@ public sealed class ThemeUpdater(ILogger<ThemeUpdater> logger) : BackgroundServi
     private static async Task<string> Fetch(HttpClient client, string url, CancellationToken token)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.UserAgent.ParseAdd("MrBoneCrash-AbyssTheme/0.2.0");
+        request.Headers.UserAgent.ParseAdd("MrBoneCrash-AbyssTheme/0.3.0");
         using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
         if (response.StatusCode != HttpStatusCode.OK) throw new HttpRequestException("Upstream returned " + (int)response.StatusCode);
         if (response.Content.Headers.ContentLength > 512 * 1024) throw new IOException("Upstream asset is too large.");
@@ -89,7 +91,7 @@ public sealed class ThemeUpdater(ILogger<ThemeUpdater> logger) : BackgroundServi
             while (!stoppingToken.IsCancellationRequested && Plugin.Instance is { Active: true } plugin)
             {
                 if (plugin.Themes.Snapshot().State.Settings.AutomaticUpdates &&
-                    (_lastAttempt is null || DateTimeOffset.UtcNow - _lastAttempt >= TimeSpan.FromHours(24)))
+                    (_lastAttempt is null || DateTimeOffset.UtcNow - _lastAttempt >= TimeSpan.FromHours(plugin.Themes.Snapshot().State.Settings.UpdateIntervalHours)))
                     await CheckAsync(stoppingToken);
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
             }
