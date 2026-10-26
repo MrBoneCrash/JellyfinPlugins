@@ -6,13 +6,6 @@ namespace Jellyfin.Plugin.AbyssTheme;
 public static class WebTransformation
 {
     public const string Marker = "id=\"MrBoneCrash-AbyssTheme-v1\"";
-    private static readonly Lazy<string> Css = new(() =>
-    {
-        using var stream = typeof(Plugin).Assembly.GetManifestResourceStream("Jellyfin.Plugin.AbyssTheme.Web.abyss.css")
-            ?? throw new InvalidOperationException("Missing embedded Abyss stylesheet.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    });
     private static readonly Regex Head = new(@"<head(?:\s[^>]*)?>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
 
     public static string Transform(JObject payload)
@@ -33,6 +26,8 @@ public static class WebTransformation
         var heads = Head.Matches(contents);
         if (heads.Count != 1) return contents;
         var index = heads[0].Index + heads[0].Length;
-        return contents.Insert(index, "\n<style " + Marker + ">\n/* Abyss by Om Gupta (AumGupta), MIT. https://github.com/AumGupta/abyss-jellyfin */\n" + Css.Value + "\n</style>\n");
+        return contents.Insert(index, "\n<style " + Marker + " media=\"not all\">\n/* Abyss by Om Gupta (AumGupta), MIT. https://github.com/AumGupta/abyss-jellyfin */\n" +
+            (Plugin.Instance is { Active: true } plugin ? plugin.Themes.Css() : ThemeStore.Bundled.Css) +
+            "\n</style>\n<script defer src=\"../AbyssTheme/client.js?v=0.2.0.0\" data-mbc-abyss-runtime=\"1\"></script>\n");
     }
 }

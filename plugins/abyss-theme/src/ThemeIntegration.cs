@@ -11,8 +11,11 @@ namespace Jellyfin.Plugin.AbyssTheme;
 
 public sealed class ServiceRegistrator : IPluginServiceRegistrator
 {
-    public void RegisterServices(IServiceCollection services, IServerApplicationHost host) =>
+    public void RegisterServices(IServiceCollection services, IServerApplicationHost host)
+    {
         services.AddHostedService<ThemeIntegration>();
+        services.AddHostedService<ThemeUpdater>();
+    }
 }
 
 public sealed class ThemeIntegration(ILogger<ThemeIntegration> logger) : BackgroundService
@@ -83,6 +86,7 @@ public sealed class ThemeIntegration(ILogger<ThemeIntegration> logger) : Backgro
         lock (Gate)
         {
             if (Plugin.Instance is { } plugin) plugin.Active = false;
+            Plugin.Instance?.Lifetime.Cancel();
             Unregister();
         }
         await base.StopAsync(cancellationToken);

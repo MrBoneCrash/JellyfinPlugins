@@ -42,7 +42,7 @@ public sealed class PluginTests
         Api.Registrations[otherId] = new JObject { ["fileNamePattern"] = "index.html" };
         var plugin = NewPlugin();
         Assert.NotNull(plugin.GetPluginInfo());
-        Assert.Equal("0.1.0.0", plugin.Version.ToString());
+        Assert.Equal("0.2.0.0", plugin.Version.ToString());
         using var integration = new ThemeIntegration(NullLogger<ThemeIntegration>.Instance);
         await integration.StartAsync(default);
         await integration.ExecuteTask!.WaitAsync(TimeSpan.FromSeconds(5));
@@ -76,6 +76,7 @@ public sealed class PluginTests
 
 public class TestPaths : DispatchProxy
 {
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "abyss-plugin-tests-" + Guid.NewGuid().ToString("N"));
     protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
-        targetMethod?.ReturnType == typeof(string) ? Path.GetTempPath() : null;
+        targetMethod?.ReturnType == typeof(string) ? _root : null;
 }

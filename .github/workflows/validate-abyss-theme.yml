@@ -29,7 +29,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - run: dotnet test plugins/abyss-theme/tests/AbyssTheme.Tests.csproj -c Release
+      - run: node --test plugins/abyss-theme/tests/runtime.test.cjs
       - run: python scripts/package_abyss_theme.py
       - uses: actions/upload-artifact@v4
         with:

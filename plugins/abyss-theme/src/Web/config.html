@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html><head><title>Abyss Theme</title></head><body>
+<div id="AbyssThemeConfig" data-role="page" class="page type-interior pluginConfigurationPage">
+  <div data-role="content"><div class="content-primary">
+    <h1>Abyss Theme</h1>
+    <p>Theme by <a href="https://github.com/AumGupta/abyss-jellyfin" target="_blank" rel="noopener noreferrer">Om Gupta (AumGupta)</a>, MIT licensed.</p>
+    <p>Applies to compatible server-hosted Jellyfin Web with Dark selected. Native clients, the separate dashboard and Spotlight are not covered.</p>
+    <p id="abyss-status" role="status" aria-live="polite">Loading status…</p>
+    <form id="abyss-settings">
+      <div class="checkboxContainer checkboxContainer-withDescription">
+        <label><input id="abyss-auto" type="checkbox" is="emby-checkbox"><span>Automatically update Abyss CSS</span></label>
+        <div class="fieldDescription">Off by default. When enabled, checks upstream main on startup and every 24 hours. Requires access to api.github.com and raw.githubusercontent.com. All CSS files and the MIT license are downloaded at the same revision. A failed check retains the active theme.</div>
+      </div>
+      <h2>Optional plugin adaptations</h2>
+      <p>Enable only for plugins you use. These options add Abyss CSS; they do not install or configure those plugins. Upstream adaptations are version specific and may lag newer plugin versions. Compatibility has not been verified with actual installations of these two plugins.</p>
+      <div class="checkboxContainer"><label><input id="abyss-je" type="checkbox" is="emby-checkbox"><span>Jellyfin Enhanced adaptation</span></label></div>
+      <p class="fieldDescription">Bundled override targets Jellyfin Enhanced 11.3.0.0. Updates may change the target version; check the upstream guide.</p>
+      <div class="checkboxContainer"><label><input id="abyss-mbe" type="checkbox" is="emby-checkbox"><span>Media Bar Enhanced adaptation</span></label></div>
+      <p class="fieldDescription">Bundled override targets Media Bar Enhanced 1.9.0.0. Updates may change the target version; check the upstream guide.</p>
+      <button is="emby-button" type="submit" class="raised button-submit block"><span>Save settings</span></button>
+    </form>
+    <p><button is="emby-button" type="button" id="abyss-check" class="raised">Check and apply latest Abyss</button></p>
+    <p>Reload open Web clients after any change. If cached CSS persists, restart Jellyfin and hard refresh. CSS validation does not guarantee visual compatibility.</p>
+    <details><summary>Recovery and reset</summary>
+      <p>Return to the previous downloaded revision, or the bundled revision if none exists. Rollback also disables automatic updates so the rejected revision is not immediately applied again.</p>
+      <button is="emby-button" type="button" id="abyss-rollback" class="raised">Restore previous theme</button>
+      <p>Reset restores the bundled theme and switches off both adaptations and automatic updates.</p>
+      <button is="emby-button" type="button" id="abyss-reset" class="raised">Reset to bundled defaults</button>
+    </details>
+    <p><a href="https://github.com/AumGupta/abyss-jellyfin/blob/main/SETUP.md#plugin-support" target="_blank" rel="noopener noreferrer">Upstream plugin support guide</a></p>
+  </div></div>
+  <script>
+  (function () {
+    var view = document.querySelector('#AbyssThemeConfig');
+    var status = view.querySelector('#abyss-status');
+    var busy = false;
+    function request(route, method, data) {
+      return ApiClient.ajax({ type: method || 'GET', url: ApiClient.getUrl('AbyssTheme/' + route),
+        data: data === undefined ? undefined : JSON.stringify(data), contentType: 'application/json',
+        dataType: method && method !== 'GET' && route !== 'check' ? undefined : 'json' });
+    }
+    function load() {
+      return request('status').then(function (data) {
+        view.querySelector('#abyss-auto').checked = data.settings.automaticUpdates;
+        view.querySelector('#abyss-je').checked = data.settings.jellyfinEnhanced;
+        view.querySelector('#abyss-mbe').checked = data.settings.mediaBarEnhanced;
+        status.textContent = 'Active revision: ' + data.revision + '. Previous: ' + (data.previousRevision || 'bundled fallback') +
+          '. Last successful check: ' + (data.lastChecked || 'never') + '.' + (data.error ? ' ' + data.error : '') +
+          (data.checking ? ' Update check in progress.' : '');
+      });
+    }
+    function perform(action) {
+      if (busy) return;
+      busy = true;
+      view.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
+      status.textContent = 'Working…';
+      Promise.resolve().then(action).then(load).catch(function () {
+        status.textContent = 'The request failed. Check administrator access, server availability and logs, then retry.';
+      }).then(function () {
+        busy = false;
+        view.querySelectorAll('button').forEach(function (button) { button.disabled = false; });
+      });
+    }
+    view.querySelector('#abyss-settings').addEventListener('submit', function (event) {
+      event.preventDefault();
+      perform(function () { return request('settings', 'PUT', {
+        automaticUpdates: view.querySelector('#abyss-auto').checked,
+        jellyfinEnhanced: view.querySelector('#abyss-je').checked,
+        mediaBarEnhanced: view.querySelector('#abyss-mbe').checked
+      }); });
+    });
+    ['check', 'rollback', 'reset'].forEach(function (action) {
+      view.querySelector('#abyss-' + action).addEventListener('click', function () {
+        perform(function () { return request(action, 'POST'); });
+      });
+    });
+    view.addEventListener('viewshow', function () { perform(function () { return Promise.resolve(); }); });
+    perform(function () { return Promise.resolve(); });
+  })();
+  </script>
+</div>
+</body></html>
