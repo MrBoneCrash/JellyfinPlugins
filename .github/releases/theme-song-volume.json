@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0.6",
+  "version": "0.1.0.7",
   "targetAbi": "12.3.0.0",
   "prerelease": true,
   "revision": 1,
-  "changelog": "[PREVIEW] Add a scoped JMP 1.12.0 MPV theme-volume adapter, refresh cached web hooks on upgrades, and allow account settings edits on unsupported players. Native commands are tested against the official JMP class with a simulated bridge; actual Windows sound output and Android playback remain unverified."
+  "changelog": "[PREVIEW] Global volume and confirmed reset now live in Account settings > Display. Library pages show one title override slider and Use global, with automatic override selection and inherited slider updates. Adds theme-aware, touch-sized controls. Android/device playback limits remain unchanged."
 }

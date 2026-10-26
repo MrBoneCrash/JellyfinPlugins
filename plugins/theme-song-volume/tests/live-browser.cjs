@@ -81,28 +81,54 @@ const assert = require('node:assert/strict');
             pass('Controls remain visible with the reported 15 Ultrachromic modules');
         }
         await panel.locator('summary').click();
-        const defaultVolume = panel.getByRole('slider', { name: 'Default volume', exact: true });
-        await defaultVolume.fill('50'); await defaultVolume.dispatchEvent('change');
+        assert.equal(await panel.locator('select,button').count(), 0);
+        const overrideVolume = panel.getByRole('slider', { name: 'Theme volume', exact: true });
+        const useGlobal = panel.getByRole('checkbox', { name: 'Use global', exact: true });
+        assert.equal(await useGlobal.isChecked(), true);
+        await overrideVolume.fill('50'); await overrideVolume.dispatchEvent('change');
         await page.waitForFunction(() => document.querySelector('#mbc-theme-volume [role=status]')?.textContent === 'Saved');
+        assert.equal(await useGlobal.isChecked(), false);
         await page.waitForFunction(() => Math.abs(document.querySelector('audio.mediaPlayerAudio').volume - .5) < .001);
         const persisted = await (await context.request.get(`${base.origin}/ThemeSongVolume/settings`, { headers })).json();
-        assert.equal(persisted.profile.volume, 50);
-        pass('Default slider changes actual playback and persists through the real API');
+        assert.equal(persisted.profile.volume, 25); assert.equal(persisted.profile.overrides[songId], 50);
+        pass('One title slider automatically creates a local override without changing global volume');
+        await useGlobal.check();
+        await page.waitForFunction(() => document.querySelector('#mbc-theme-volume [role=status]')?.textContent === 'Saved');
+        assert.equal(await overrideVolume.inputValue(), '25');
 
-        await panel.getByRole('checkbox').check();
-        const overrideVolume = panel.getByRole('slider', { name: 'Song volume', exact: true });
+        const displayUrl = `${base.origin}/web/index.html#!/mypreferencesdisplay?userId=${session.userId}`;
+        await page.goto(displayUrl);
+        const settings = page.locator('#mbc-theme-volume-settings');
+        await settings.waitFor({ state: 'visible', timeout: 30000 });
+        const global = settings.getByRole('slider', { name: 'Global volume', exact: true });
+        await global.fill('50'); await global.dispatchEvent('change');
+        await page.waitForFunction(() => document.querySelector('#mbc-theme-volume-settings [role=status]')?.textContent === 'Saved');
+        // A normal React preferences re-render must preserve the additive section.
+        const themeOption = page.locator('input[name=enableLibraryThemeSongs]');
+        const previousThemeOption = await themeOption.isChecked();
+        await themeOption.setChecked(!previousThemeOption); await themeOption.setChecked(previousThemeOption);
+        assert.equal(await settings.count(), 1); assert.equal(await global.inputValue(), '50');
+        assert.equal(await settings.getByRole('button', { name: 'Reset all theme volumes' }).isDisabled(), true);
+        if (process.env.THEME_VOLUME_LIVE_SCREENSHOT)
+            await page.screenshot({ path: process.env.THEME_VOLUME_LIVE_SCREENSHOT.replace('.png', '-settings.png'), fullPage: true });
+        pass('Global volume is beside the real Display theme option and survives React updates');
+        await page.goto(detailUrl); await panel.waitFor({ state: 'visible' });
+        if (await panel.getAttribute('open') === null) await panel.locator('summary').click();
+        await page.waitForFunction(() => Math.abs(document.querySelector('audio.mediaPlayerAudio').volume - .5) < .001);
+        if (await panel.getAttribute('open') === null) await panel.locator('summary').click();
+        assert.equal(await useGlobal.isChecked(), true); assert.equal(await overrideVolume.inputValue(), '50');
         await overrideVolume.fill('0'); await overrideVolume.dispatchEvent('change');
         await page.waitForFunction(() => document.querySelector('audio.mediaPlayerAudio').volume === 0);
-        await page.waitForTimeout(250);
+        await page.waitForFunction(() => document.querySelector('#mbc-theme-volume [role=status]')?.textContent === 'Saved');
         const muted = await (await context.request.get(`${base.origin}/ThemeSongVolume/settings`, { headers })).json();
         assert.equal(muted.profile.overrides[songId], 0);
         assert.equal(await page.locator('audio.mediaPlayerAudio').evaluate(audio => audio.paused), false);
-        await panel.getByRole('checkbox').uncheck();
+        await useGlobal.check();
         await page.waitForFunction(() => Math.abs(document.querySelector('audio.mediaPlayerAudio').volume - .5) < .001);
-        pass('Per-song mute and inheritance affect the real playing theme');
+        assert.equal(await overrideVolume.inputValue(), '50');
+        pass('Use global removes the override and immediately moves the slider to global volume');
         assert.equal(await page.evaluate(() => localStorage.getItem('volume')), masterBefore);
         pass('Jellyfin master-volume storage is unchanged by theme adjustments');
-
         if (process.env.THEME_VOLUME_LIVE_SCREENSHOT)
             await page.screenshot({ path: process.env.THEME_VOLUME_LIVE_SCREENSHOT, fullPage: true });
         const movieHash = new URL(page.url()).hash;
@@ -136,22 +162,39 @@ const assert = require('node:assert/strict');
             diagnostics: window.__MrBoneCrashThemeVolumeV1.diagnostics(), master: localStorage.getItem('volume')
         }))));
 
-        await panel.locator('summary').click();
-        const reset = panel.getByRole('button', { name: 'Reset all theme volumes' });
-        await reset.click();
-        await page.waitForFunction(() => document.querySelector('#mbc-theme-volume [role=status]')?.textContent === 'Theme volumes reset');
-        console.log('Reset playback state:', JSON.stringify(await page.evaluate(() => ({
-            diagnostics: window.__MrBoneCrashThemeVolumeV1.diagnostics(), master: localStorage.getItem('volume')
-        }))));
-        await page.waitForFunction(() => Math.abs(document.querySelector('audio.mediaPlayerAudio').volume - .25) < .001);
-        pass('Reset removes overrides and restores the default during playback');
+        await page.goto(displayUrl); await settings.waitFor({ state: 'visible' });
+        const reset = settings.getByRole('button', { name: 'Reset all theme volumes' });
+        const confirm = settings.getByRole('checkbox', { name: 'Confirm reset of all theme volumes' });
+        assert.equal(await reset.isDisabled(), true);
+        await confirm.check(); await confirm.uncheck(); assert.equal(await reset.isDisabled(), true);
+        await confirm.check(); await reset.click();
+        await page.waitForFunction(() => document.querySelector('#mbc-theme-volume-settings [role=status]')?.textContent === 'Theme volumes reset');
+        assert.equal(await confirm.isChecked(), false); assert.equal(await reset.isDisabled(), true);
+        assert.ok(page.url().includes('mypreferencesdisplay'), 'Reset must keep the user on Display settings');
+        const resetProfile = await (await context.request.get(`${base.origin}/ThemeSongVolume/settings`, { headers })).json();
+        assert.equal(resetProfile.profile.volume, 25); assert.deepEqual(resetProfile.profile.overrides, {});
+        await page.goto(detailUrl); await page.reload(); await panel.waitFor({ state: 'visible' });
+        await page.waitForFunction(() => {
+            const audio = document.querySelector('audio.mediaPlayerAudio');
+            return audio && !audio.paused && Math.abs(audio.volume - .25) < .001;
+        });
+        if (await panel.getAttribute('open') === null) await panel.locator('summary').click();
+        assert.equal(await useGlobal.isChecked(), true); assert.equal(await overrideVolume.inputValue(), '25');
+        pass('Confirmed reset in Display restores global defaults and clears title overrides');
         // Save a profile again so uninstall must remove an actual settings file.
-        await defaultVolume.fill('40'); await defaultVolume.dispatchEvent('change');
-        await page.waitForFunction(() => document.querySelector('#mbc-theme-volume [role=status]')?.textContent === 'Saved');
+        await page.goto(displayUrl); await settings.waitFor({ state: 'visible' });
+        await global.fill('40'); await global.dispatchEvent('change');
+        await page.waitForFunction(() => document.querySelector('#mbc-theme-volume-settings [role=status]')?.textContent === 'Saved');
+        await page.goto(detailUrl); await page.reload(); await panel.waitFor({ state: 'visible' });
+        await page.waitForFunction(() => {
+            const audio = document.querySelector('audio.mediaPlayerAudio');
+            return audio && !audio.paused && Math.abs(audio.volume - .4) < .001;
+        });
         const removed = await context.request.delete(`${base.origin}/Plugins/bc7977c8-ec09-4da4-8030-97c7e5a21491`, { headers });
         assert.equal(removed.status(), 204);
         await page.waitForFunction(() => !window.__MrBoneCrashThemeVolumeV1, { timeout: 20000 });
         assert.equal(await panel.count(), 0);
+        assert.equal(await settings.count(), 0);
         assert.equal(await page.locator('audio.mediaPlayerAudio').evaluate(audio => audio.volume), 1);
         assert.equal(await page.locator('#mbc-theme-volume-style').count(), 0);
         assert.equal(fs.existsSync(path.join(session.configurationDirectory, 'MrBoneCrash.ThemeSongVolume')), false);

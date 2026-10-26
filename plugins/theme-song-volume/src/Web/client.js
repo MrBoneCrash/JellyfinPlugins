@@ -150,6 +150,7 @@
     const playback = createPlayback();
     let knownThemes = new WeakSet();
     let songs = [];
+    let activeThemeId = null;
     let profile = defaults();
     let saved = clone(profile);
     let userId = null;
@@ -161,6 +162,10 @@
     let saving = false;
     let pendingSave = false;
     let panel = null;
+    let settingsPanel = null;
+    let editingInput = null;
+    let resetting = false;
+    let editRevision = 0;
     let observer = null;
     let refreshing = false;
     let statusText = '';
@@ -204,8 +209,11 @@
         loaded = false;
         pendingSave = false;
         pendingPlayback = null;
+        editingInput = null;
+        settingsPanel?.remove(); settingsPanel = null;
         knownThemes = new WeakSet();
         songs = [];
+        activeThemeId = null;
         playback.reset();
         mpv.reset();
         mpv.setProfile({ volume: 100, overrides: {} });
@@ -222,13 +230,15 @@
             clearSession();
             userId = nextUser;
         }
-        if (saving) return;
+        if (saving || resetting || editingInput) return;
         if (!userId) return;
         refreshing = true;
         const epoch = generation;
+        const revision = editRevision;
         try {
             const result = await request();
             if (stopped || epoch !== generation || api()?.getCurrentUserId() !== userId) return;
+            if (revision !== editRevision || editingInput || saving || resetting) return;
             if (!result.integrationReady) { dispose(); return; }
             profile = result.profile;
             saved = clone(profile);
@@ -239,7 +249,7 @@
                 pendingPlayback = null;
             }
             mount();
-            if (!panel?.contains(document.activeElement)) render();
+            render();
         } catch (error) {
             if (error.name !== 'AbortError') {
                 // Failed health checks release attenuation; playback itself continues normally.
@@ -252,10 +262,11 @@
     }
 
     async function save() {
+        if (stopped) return;
         if (api()?.getCurrentUserId() !== userId) { void refresh(); return; }
         pendingSave = true;
-        if (saving || !loaded) return;
-        saving = true;
+        if (saving || resetting || !loaded) return;
+        saving = true; statusText = 'Saving…'; render();
         const epoch = generation;
         try {
             while (pendingSave && !stopped && epoch === generation) {
@@ -284,150 +295,162 @@
         return node;
     }
 
+    function localIds() { return [...new Set(songs.map(song => normalizeId(song.Id)))]; }
+    function localValue() {
+        return profile.overrides[activeThemeId || localIds()[0]] ?? profile.volume;
+    }
+    function status(container) {
+        const node = element('p', '', 'mbc-volume-status');
+        node.setAttribute('role', 'status'); node.setAttribute('aria-live', 'polite');
+        container.append(node); return node;
+    }
+    function checkbox(container, text, handler) {
+        const label = element('label', null, 'mbc-volume-check');
+        const input = element('input'); input.type = 'checkbox'; input.className = 'mbc-volume-checkbox';
+        label.append(input, element('span', text)); container.append(label);
+        input.addEventListener('change', handler);
+        return input;
+    }
+    function slider(container, label, onInput) {
+        const wrapper = element('label', null, 'mbc-volume-field');
+        const text = element('span');
+        const input = element('input'); input.type = 'range'; input.className = 'mbc-volume-slider';
+        input.min = '0'; input.max = '100'; input.step = '1'; input.setAttribute('aria-label', label);
+        const preview = () => { editRevision++; onInput(Number(input.value)); applyProfile(profile); render(); };
+        input.addEventListener('input', () => { editingInput = input; preview(); });
+        input.addEventListener('change', () => { preview(); editingInput = null; void save(); });
+        input.addEventListener('blur', () => {
+            if (editingInput === input) { editingInput = null; void save(); }
+        });
+        wrapper.append(text, input); container.append(wrapper);
+        return { input, text, label };
+    }
+    function updateSlider(control, value) {
+        control.text.textContent = `${control.label}: ${value}%`;
+        if (editingInput !== control.input) control.input.value = value;
+        control.input.disabled = !loaded || resetting;
+        control.input.style.setProperty('--mbc-volume-fill', `${value}%`);
+        control.input.setAttribute('aria-valuetext', `${value}%`);
+    }
+    function mountSettings() {
+        const settingsUser = new URLSearchParams((root.location.hash.split('?')[1] || '')).get('userId');
+        if (settingsUser && normalizeId(settingsUser) !== normalizeId(userId)) {
+            settingsPanel?.remove(); settingsPanel = null; return;
+        }
+        const view = document.querySelector('#displayPreferencesPage:not(.hide)');
+        const description = view?.querySelector('#display-settings-lib-theme-songs-description');
+        const anchor = description?.closest('.MuiFormControl-root');
+        if (!anchor) {
+            if (settingsPanel?._mbc?.confirm.checked) {
+                settingsPanel._mbc.confirm.checked = false;
+                settingsPanel._mbc.reset.disabled = true;
+            }
+            return;
+        }
+        if (settingsPanel?.isConnected && settingsPanel.parentElement === anchor.parentElement) return;
+        settingsPanel?.remove();
+        settingsPanel = element('section', null, 'mbc-theme-volume-ui mbc-volume-settings');
+        settingsPanel.id = 'mbc-theme-volume-settings';
+        const heading = element('h3', 'Theme song volume'); heading.id = 'mbc-volume-settings-heading';
+        settingsPanel.setAttribute('aria-labelledby', heading.id); settingsPanel.append(heading);
+        settingsPanel.append(element('p', 'Global volume for your account, shared by compatible clients. Library titles can override it. Changes save automatically.'));
+        const global = slider(settingsPanel, 'Global volume', value => { profile.volume = value; });
+        settingsPanel.append(element('p', 'Reset restores 25% globally and removes all of your title overrides.'));
+        const confirm = checkbox(settingsPanel, 'Confirm reset of all theme volumes', () => render());
+        const reset = element('button', 'Reset all theme volumes', 'raised button-cancel emby-button');
+        reset.type = 'button';
+        reset.addEventListener('click', async () => {
+            if (!confirm.checked || !loaded || saving || resetting) return;
+            const epoch = generation; editRevision++; resetting = true; confirm.checked = false; render();
+            try {
+                await request('DELETE');
+                if (stopped || epoch !== generation || api()?.getCurrentUserId() !== userId) return;
+                profile = defaults(); saved = clone(profile); pendingSave = false;
+                applyProfile(profile); statusText = 'Theme volumes reset';
+            } catch (error) { if (epoch === generation) statusText = error.message; }
+            finally { resetting = false; if (!stopped && epoch === generation) render(); }
+        });
+        settingsPanel.append(reset);
+        settingsPanel._mbc = { global, confirm, reset, status: status(settingsPanel) };
+        // Add beside the existing theme option without replacing React-owned nodes.
+        anchor.insertAdjacentElement('afterend', settingsPanel);
+        render();
+    }
     function mount() {
-        if (stopped || !loaded || !songs.length || panel?.isConnected) return;
+        if (stopped || !loaded) return;
+        mountSettings();
+        if (!songs.length) { removePanel(); return; }
         const view = document.querySelector('.itemDetailPage:not(.hide), .detailPage:not(.hide)');
         const anchor = view?.querySelector('.mainDetailButtons, .detailButtons');
         if (!anchor) return;
+        if (panel?.isConnected && panel.closest('.itemDetailPage, .detailPage') === view) return;
         removePanel();
-        panel = element('details', null, 'mbc-theme-volume');
-        panel.id = 'mbc-theme-volume';
+        panel = element('details', null, 'mbc-theme-volume-ui'); panel.id = 'mbc-theme-volume';
         panel.append(element('summary', 'Theme volume'));
-        const body = element('div');
-        body.dataset.body = 'true';
-        panel.append(body);
-        // The ribbon lays metadata and buttons out horizontally. Keep our
-        // expandable controls in the content below it, rather than adding a column.
+        const body = element('div'); body.dataset.body = 'true'; panel.append(body);
+        const useGlobal = checkbox(body, 'Use global', () => {
+            if (!loaded || resetting) return;
+            editRevision++;
+            for (const id of localIds()) {
+                if (useGlobal.checked) delete profile.overrides[id];
+                else profile.overrides[id] = profile.volume;
+            }
+            applyProfile(profile); render(); void save();
+        });
+        const volume = slider(body, 'Theme volume', value => {
+            for (const id of localIds()) profile.overrides[id] = value;
+        });
+        const capability = element('p', 'Playback control is unavailable on this player. Changes are saved to your account and apply on supported players.');
+        capability.dataset.capability = 'true'; body.append(capability);
+        panel._mbc = { useGlobal, volume, capability, status: status(body) };
         const content = view.querySelector('.detailPagePrimaryContent');
         if (content) content.prepend(panel);
         else anchor.insertAdjacentElement('afterend', panel);
         render();
     }
-
-    function slider(body, label, value, disabled, onInput, onChange) {
-        const wrapper = element('label');
-        const text = element('span', `${label}: ${value}%`);
-        const input = element('input');
-        input.type = 'range';
-        input.min = '0'; input.max = '100'; input.step = '1'; input.value = value;
-        input.disabled = disabled || !loaded;
-        input.setAttribute('aria-label', label);
-        input.addEventListener('input', () => {
-            if (!loaded) return;
-            text.textContent = `${label}: ${input.value}%`;
-            onInput(Number(input.value));
-            applyProfile(profile);
-        });
-        input.addEventListener('change', onChange);
-        wrapper.append(text, input); body.append(wrapper);
-    }
-
     function render() {
-        const body = panel?.querySelector('[data-body]');
-        if (!body) return;
-        const selected = body.querySelector('select')?.value || normalizeId(songs[0]?.Id);
-        // Save completion must not take focus away from keyboard controls.
-        if (body.contains(document.activeElement)) {
-            const inactive = !loaded;
-            const defaultInput = body.querySelector('input[aria-label="Default volume"]');
-            const songInput = body.querySelector('input[aria-label="Song volume"]');
-            const toggle = body.querySelector('input[type=checkbox]');
-            if (defaultInput) {
-                defaultInput.value = profile.volume;
-                defaultInput.disabled = inactive;
-                defaultInput.previousSibling.textContent = `Default volume: ${profile.volume}%`;
-            }
-            if (toggle && songInput) {
-                toggle.checked = profile.overrides[selected] !== undefined;
-                toggle.disabled = inactive;
-                songInput.disabled = inactive || !toggle.checked;
-                songInput.value = profile.overrides[selected] ?? profile.volume;
-                songInput.previousSibling.textContent = `Song volume: ${songInput.value}%`;
-            }
-            const reset = body.querySelector('button');
-            if (reset) reset.disabled = inactive || saving;
-            const status = body.querySelector('[role=status]');
-            if (status) status.textContent = statusText;
-            const capability = body.querySelector('[data-capability]');
-            if (capability) capability.hidden = playerReady;
-            return;
+        if (panel?._mbc) {
+            const controls = panel._mbc;
+            controls.useGlobal.checked = localIds().every(id => profile.overrides[id] === undefined);
+            controls.useGlobal.disabled = !loaded || resetting;
+            updateSlider(controls.volume, localValue());
+            controls.capability.hidden = playerReady;
+            controls.status.textContent = statusText;
         }
-        // Jellyfin Media Player's Chromium 83 predates replaceChildren().
-        body.textContent = '';
-        body.append(element('p', 'Theme songs only. Your regular playback volume remains the master volume.'));
-        const capability = element('p', 'Playback control is unavailable on this player. Changes are saved to your account and apply on supported players.');
-        capability.dataset.capability = 'true'; capability.hidden = playerReady; body.append(capability);
-        slider(body, 'Default volume', profile.volume, false,
-            value => {
-                profile.volume = value;
-                const inherited = body.querySelector('input[aria-label="Song volume"]');
-                if (inherited?.disabled) {
-                    inherited.value = value;
-                    inherited.previousSibling.textContent = `Song volume: ${value}%`;
-                }
-            }, save);
-        const songLabel = element('label', 'Song');
-        const select = element('select', null, 'emby-select emby-select-withcolor');
-        select.setAttribute('aria-label', 'Theme song');
-        for (const [index, song] of songs.entries()) {
-            const option = element('option', song.Name || `Theme song ${index + 1}`);
-            option.value = normalizeId(song.Id);
-            select.append(option);
+        if (settingsPanel?._mbc) {
+            const controls = settingsPanel._mbc;
+            updateSlider(controls.global, profile.volume);
+            controls.confirm.disabled = !loaded || saving || resetting;
+            controls.reset.disabled = !loaded || saving || resetting || !controls.confirm.checked;
+            controls.status.textContent = statusText;
         }
-        select.value = songs.some(song => normalizeId(song.Id) === selected) ? selected : normalizeId(songs[0].Id);
-        songLabel.append(select); body.append(songLabel);
-        const id = select.value;
-        const override = profile.overrides[id] !== undefined;
-        const toggleLabel = element('label', null, 'mbc-theme-volume-toggle');
-        const toggle = element('input'); toggle.type = 'checkbox'; toggle.checked = override;
-        toggle.disabled = !loaded;
-        toggleLabel.append(toggle, document.createTextNode('Use a custom volume for this song'));
-        body.append(toggleLabel);
-        const customValue = profile.overrides[id] ?? profile.volume;
-        slider(body, 'Song volume', customValue, !override,
-            value => { profile.overrides[id] = value; }, save);
-        const custom = body.querySelector('input[aria-label="Song volume"]');
-        toggle.addEventListener('change', () => {
-            if (toggle.checked) profile.overrides[id] = profile.volume;
-            else delete profile.overrides[id];
-            custom.disabled = !toggle.checked;
-            custom.value = profile.overrides[id] ?? profile.volume;
-            custom.previousSibling.textContent = `Song volume: ${custom.value}%`;
-            applyProfile(profile);
-            void save();
-        });
-        select.addEventListener('change', () => {
-            // Explicit selection changes rebuild the panel, then restore focus.
-            select.blur(); render(); body.querySelector('select')?.focus();
-        });
-        const status = element('p', statusText); status.setAttribute('role', 'status');
-        status.setAttribute('aria-live', 'polite'); body.append(status);
-        const reset = element('button', 'Reset all theme volumes', 'raised button-submit block emby-button');
-        reset.type = 'button'; reset.disabled = !loaded || saving;
-        reset.addEventListener('click', async () => {
-            reset.disabled = true;
-            try {
-                await request('DELETE');
-                profile = defaults(); saved = clone(profile);
-                applyProfile(profile); statusText = 'Theme volumes reset';
-            } catch (error) { statusText = error.message; }
-            if (!stopped) { panel.querySelector('summary').focus(); render(); }
-        });
-        body.append(reset);
     }
 
     const style = element('style');
     style.textContent = `
-      #mbc-theme-volume { max-width: 30em; margin: 1em 0; text-align: start; }
-      #mbc-theme-volume summary { cursor: pointer; opacity: .85; width: fit-content; padding: .4em 0; }
-      #mbc-theme-volume summary:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
-      #mbc-theme-volume [data-body] { padding: .5em 1em; border-inline-start: 2px solid currentColor; }
-      #mbc-theme-volume label { display: block; margin-block: 1em; }
-      #mbc-theme-volume input[type=range], #mbc-theme-volume select { display: block; width: 100%; margin-top: .6em; box-sizing: border-box; }
-      #mbc-theme-volume select { padding: .5em; color: inherit; background-color: rgba(0,0,0,.18); }
-      #mbc-theme-volume option { color: CanvasText; background-color: Canvas; }
-      #mbc-theme-volume p { font-size: .9em; opacity: .8; }
-      #mbc-theme-volume .mbc-theme-volume-toggle { display: flex; align-items: center; gap: .6em; }
+      .mbc-theme-volume-ui { --mbc-volume-accent: var(--jf-palette-primary-main, rgb(var(--accent, 0, 164, 220))); box-sizing: border-box; min-width: 0; max-width: 30em; margin: 1em 0; text-align: start; font: inherit; color: inherit; }
+      .mbc-volume-settings { width: 100%; max-width: none; }
+      .mbc-theme-volume-ui h3 { font-size: 1.15em; font-weight: 500; margin: .5em 0; }
+      .mbc-theme-volume-ui summary { cursor: pointer; width: fit-content; min-height: 44px; display: list-item; padding: .6em 0; box-sizing: border-box; }
+      .mbc-theme-volume-ui [data-body] { padding: .25em 0; }
+      .mbc-theme-volume-ui p { font-size: .9em; opacity: .8; margin: .6em 0; }
+      .mbc-theme-volume-ui [hidden] { display: none; }
+      .mbc-theme-volume-ui .mbc-volume-field { display: block; margin: .5em 0 1em; }
+      .mbc-theme-volume-ui .mbc-volume-slider { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 44px; margin: 0; padding: 0; border: 0; background: transparent; color: var(--mbc-volume-accent); cursor: pointer; touch-action: pan-y; box-sizing: border-box; }
+      .mbc-theme-volume-ui .mbc-volume-slider::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(to right, currentColor var(--mbc-volume-fill), rgba(128,128,128,.5) var(--mbc-volume-fill)); }
+      .mbc-theme-volume-ui .mbc-volume-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border: 0; border-radius: 50%; background: currentColor; }
+      .mbc-theme-volume-ui .mbc-volume-slider::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(128,128,128,.5); }
+      .mbc-theme-volume-ui .mbc-volume-slider::-moz-range-progress { height: 4px; background: currentColor; }
+      .mbc-theme-volume-ui .mbc-volume-slider::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: 50%; background: currentColor; }
+      .mbc-theme-volume-ui .mbc-volume-check { display: flex; align-items: center; min-height: 44px; cursor: pointer; margin: .5em 0; }
+      .mbc-theme-volume-ui .mbc-volume-check > span { margin-inline-start: .75em; }
+      .mbc-theme-volume-ui .mbc-volume-checkbox { -webkit-appearance: none; appearance: none; display: inline-block; position: relative; flex: 0 0 20px; width: 20px; height: 20px; margin: 0; padding: 0; border: 2px solid currentColor; border-radius: 3px; background: transparent; color: inherit; cursor: pointer; box-sizing: border-box; }
+      .mbc-theme-volume-ui .mbc-volume-checkbox:checked { background: var(--mbc-volume-accent); border-color: var(--mbc-volume-accent); }
+      .mbc-theme-volume-ui .mbc-volume-checkbox:checked::after { content: ''; position: absolute; left: 5px; top: 1px; width: 5px; height: 9px; border: solid var(--jf-palette-primary-contrastText, #fff); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+      .mbc-theme-volume-ui input:focus, .mbc-theme-volume-ui summary:focus, .mbc-theme-volume-ui button:focus { outline: 2px solid var(--mbc-volume-accent); outline-offset: 3px; }
+      .mbc-theme-volume-ui input:disabled { opacity: .5; cursor: default; }
+      .mbc-theme-volume-ui button { min-height: 44px; max-width: 100%; white-space: normal; }
+      .mbc-theme-volume-ui button:disabled { opacity: .45; cursor: default; }
     `;
     style.id = 'mbc-theme-volume-style'; document.head.append(style);
 
@@ -439,7 +462,7 @@
         listeners.splice(0).forEach(remove => remove());
         clearInterval(heartbeat);
         observer?.disconnect();
-        removePanel(); style.remove(); playback.dispose(); mpv.dispose();
+        removePanel(); settingsPanel?.remove(); settingsPanel = null; style.remove(); playback.dispose(); mpv.dispose();
         // Let queued restoration volumechange events pass through the persistence guard.
         setTimeout(() => { if (root[key] === bridge) delete root[key]; }, 150);
     }
@@ -452,6 +475,7 @@
         },
         play(player, options) {
             try {
+                if (knownThemes.has(options?.item)) { activeThemeId = normalizeId(options.item.Id); render(); }
                 if (knownThemes.has(options?.item) && player?.id !== 'htmlaudioplayer') {
                     playerReady = false; playbackBackend = 'unavailable'; render();
                 }
@@ -463,15 +487,19 @@
         audioReady() { playbackBackend = 'html-audio'; if (!playerReady) { playerReady = true; mount(); render(); } },
         themes(items) {
             if (stopped) return items;
+            const previousIds = localIds().sort().join(',');
             knownThemes = new WeakSet();
             songs = items.filter(item => item.MediaType === 'Audio');
+            activeThemeId = normalizeId(songs[0]?.Id);
             songs.forEach(song => knownThemes.add(song));
-            removePanel(); mount();
+            if (previousIds !== localIds().sort().join(',')) removePanel();
+            mount(); render();
             return items; // Preserve the original array and its item identities.
         },
         prepare(audio, item, masterVolume) {
             if (api()?.getCurrentUserId() !== userId) { pendingPlayback = null; void refresh(); playback.release(audio); return; }
             const theme = knownThemes.has(item);
+            if (theme) { activeThemeId = normalizeId(item.Id); render(); }
             pendingPlayback = theme && !loaded ? { audio, item, masterVolume } : null;
             playback.prepare(audio, loaded && theme ? item : null, masterVolume);
         },

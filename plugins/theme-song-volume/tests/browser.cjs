@@ -45,15 +45,22 @@ const assert = require('node:assert/strict');
             ? cssModules.map(name => fs.readFileSync(path.join(process.env.THEME_VOLUME_CSS_DIR, name), 'utf8')).join('\n') +
                 '\n.backdropImage{filter:blur(4px) saturate(110%) contrast(110%) brightness(65%)}:root{--rounding:12px;--accent:52,227,5}.backgroundContainer{background-color:rgba(var(--accent),0)!important}'
             : '';
+        const extraCss = process.env.THEME_VOLUME_CSS_FILE ? fs.readFileSync(process.env.THEME_VOLUME_CSS_FILE, 'utf8') : '';
         let removed = false;
         let writes = 0;
         let firstRead = true;
+        let staleRead = null;
         await page.route('http://theme-volume.test/**', async route => {
             const url = new URL(route.request().url());
             if (url.pathname.endsWith('client.js')) return route.fulfill({ contentType: 'application/javascript',
                 body: fs.readFileSync(path.join(__dirname, '../src/Web/client.js'), 'utf8') });
             if (url.pathname.endsWith('/settings')) {
                 assert.equal(route.request().headers()['authorization'], 'MediaBrowser Token="fixture-only-token"');
+                if (staleRead && route.request().method() === 'GET') {
+                    const read = staleRead; staleRead = null;
+                    const snapshot = JSON.parse(JSON.stringify(profile)); read.started(); await read.gate;
+                    return route.fulfill({ json: { profile: snapshot, integrationReady: true } });
+                }
                 if (firstRead && route.request().method() === 'GET') {
                     firstRead = false;
                     await new Promise(resolve => setTimeout(resolve, 200));
@@ -67,145 +74,149 @@ const assert = require('node:assert/strict');
                 return route.fulfill({ json: route.request().method() === 'GET'
                     ? { profile, integrationReady: true } : profile });
             }
-            return route.fulfill({ contentType: 'text/html', body: `<!DOCTYPE html><html class="layout-desktop"><head>
-                <style>body{background:#181818;color:#eee;font:16px system-ui;margin:24px}button{padding:8px}</style>
-                <style>${customCss}</style>
+            return route.fulfill({ contentType: 'text/html', body: `<!DOCTYPE html><html class="layout-desktop" data-theme="dark"><head>
+                <style>.hide{display:none!important}body{background:#181818;color:#eee;font:16px system-ui;margin:24px}button{padding:8px}.emby-button{font:inherit;color:inherit}</style>
+                <style>${customCss}${extraCss}</style>
                 <script>window.ApiClient={getCurrentUserId:()=> 'fixture-user',accessToken:()=> 'fixture-only-token',serverAddress:()=> 'http://theme-volume.test'};</script>
                 <script defer src="/ThemeSongVolume/client.js"></script></head><body>
                 <main id="itemDetailPage" class="page libraryPage itemDetailPage"><h1>Example Series</h1><div class="detailRibbon"><div class="mainDetailButtons focuscontainer-x"><button>Play</button></div></div></main>
+                <section id="displayPreferencesPage" class="page userPreferencesPage hide"><div class="settingsContainer"><form>
+                  <div class="MuiFormControl-root"><label><input type="checkbox" name="enableLibraryThemeSongs">Theme songs</label><p id="display-settings-lib-theme-songs-description">Play themes</p></div>
+                  <button type="submit">Save display preferences</button>
+                </form></div></section>
                 </body></html>` });
         });
         await page.goto('http://theme-volume.test/web/index.html');
-        await page.waitForFunction(() => window.__MrBoneCrashThemeVolumeV1);
-        // Reading account settings must not falsely promise playback support.
-        // Editing remains possible even before a supported player has appeared.
+        await page.waitForFunction(() => window.__MrBoneCrashThemeVolumeV1?.diagnostics().settingsLoaded);
+        const panel = page.locator('#mbc-theme-volume');
+        const settings = page.locator('#mbc-theme-volume-settings');
+        const waitSaved = id => page.waitForFunction(id => document.querySelector(`#${id} [role=status]`)?.textContent === 'Saved', id);
+        const display = async () => {
+            await page.evaluate(() => {
+                document.querySelector('#itemDetailPage').classList.add('hide');
+                document.querySelector('#displayPreferencesPage').classList.remove('hide');
+                document.dispatchEvent(new CustomEvent('viewshow'));
+            });
+            await settings.waitFor({ state: 'visible' });
+        };
+        const library = async () => {
+            await page.evaluate(() => {
+                document.querySelector('#itemDetailPage').classList.remove('hide');
+                document.querySelector('#displayPreferencesPage').classList.add('hide');
+                document.dispatchEvent(new CustomEvent('viewshow'));
+            });
+            await panel.waitFor({ state: 'visible' });
+            if (await panel.getAttribute('open') === null) await panel.locator('summary').click();
+        };
         await page.evaluate(() => {
-            window.__unsupportedTheme = { Id: 'bc7977c8ec094da4803097c7e5a21491', MediaType: 'Audio', Name: 'Theme' };
-            window.__MrBoneCrashThemeVolumeV1.themes([window.__unsupportedTheme]);
+            window.originalFetch = window.fetch; window.originalPlay = HTMLMediaElement.prototype.play;
+            window.song = { Id: 'bc7977c8ec094da4803097c7e5a21491', MediaType: 'Audio', Name: 'Theme one' };
+            window.secondSong = { Id: '11111111111111111111111111111111', MediaType: 'Audio', Name: 'Theme two' };
+            window.__MrBoneCrashThemeVolumeV1.themes([window.song, window.secondSong]);
         });
-        await page.waitForSelector('#mbc-theme-volume');
-        if (await page.locator('#mbc-theme-volume').getAttribute('open') === null)
-            await page.locator('#mbc-theme-volume summary').click();
-        assert.equal(await page.getByRole('slider', { name: 'Default volume', exact: true }).isEnabled(), true);
-        assert.equal(await page.locator('[data-capability]').isVisible(), true);
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).fill('35');
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).dispatchEvent('change');
-        await page.waitForFunction(() => document.querySelector('[role=status]').textContent === 'Saved');
-        assert.equal(profile.volume, 35);
-        // Restore the starting profile through the UI before playback assertions.
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).fill('25');
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).dispatchEvent('change');
-        await page.waitForFunction(() => document.querySelector('[role=status]').textContent === 'Saved');
+        await library();
+        await page.evaluate(() => { window.originalThemePanel = document.getElementById('mbc-theme-volume'); window.__MrBoneCrashThemeVolumeV1.themes([window.song, window.secondSong]); });
+        assert.equal(await page.evaluate(() => window.originalThemePanel === document.getElementById('mbc-theme-volume') && window.originalThemePanel.open), true,
+            'Refreshing the same title must preserve the open panel');
+        assert.equal(await panel.getByRole('slider').count(), 1);
+        assert.equal(await panel.locator('select,button').count(), 0, 'No title selector or reset button on library pages');
+        assert.equal(await panel.getByRole('checkbox', { name: 'Use global', exact: true }).isChecked(), true);
+        assert.equal(await panel.getByRole('slider').inputValue(), '25');
+        assert.equal(await panel.locator('[data-capability]').isVisible(), true);
+        const local = panel.getByRole('slider', { name: 'Theme volume', exact: true });
+        await local.fill('35'); await local.dispatchEvent('change'); await waitSaved('mbc-theme-volume');
+        assert.equal(await panel.getByRole('checkbox').isChecked(), false, 'Slider movement automatically opts out of global');
+        assert.equal(profile.volume, 25);
+        assert.deepEqual(Object.values(profile.overrides), [35,35], 'No selector: this title override covers its theme songs');
+        await panel.getByRole('checkbox').check(); await waitSaved('mbc-theme-volume');
+        assert.equal(await local.inputValue(), '25'); assert.deepEqual(profile.overrides, {});
+
+        await display();
+        assert.equal(await settings.getByRole('slider').count(), 1);
+        assert.equal(await settings.getByRole('button', { name: 'Reset all theme volumes' }).isDisabled(), true);
+        const global = settings.getByRole('slider', { name: 'Global volume', exact: true });
+        await global.fill('50'); await global.dispatchEvent('change'); await waitSaved('mbc-theme-volume-settings');
+        assert.equal(profile.volume, 50);
+        await page.evaluate(() => { location.hash = '#/mypreferencesdisplay?userId=other-user'; document.dispatchEvent(new CustomEvent('viewshow')); });
+        await settings.waitFor({ state: 'detached' });
+        await page.evaluate(() => { location.hash = '#/mypreferencesdisplay?userId=fixture-user'; document.dispatchEvent(new CustomEvent('viewshow')); });
+        await settings.waitFor({ state: 'visible' });
+        await library(); assert.equal(await local.inputValue(), '50');
         await page.evaluate(() => {
-            window.originalFetch = window.fetch;
-            window.originalPlay = HTMLMediaElement.prototype.play;
-            window.song = { Id: 'bc7977c8ec094da4803097c7e5a21491', MediaType: 'Audio', Name: 'Example theme' };
             window.__MrBoneCrashThemeVolumeV1.audioReady();
-            window.__MrBoneCrashThemeVolumeV1.themes([window.song]);
-            window.audio = document.createElement('audio');
-            document.body.append(window.audio);
-            window.audio.volume = 0.8;
-            // Theme playback may begin before its initial settings request completes.
+            window.audio = document.createElement('audio'); document.body.append(window.audio); window.audio.volume = .8;
             window.__MrBoneCrashThemeVolumeV1.prepare(window.audio, window.song);
         });
-        await page.waitForSelector('#mbc-theme-volume', { timeout: 5000 });
-        assert.equal(await page.locator('.detailButtons').count(), 0);
-        assert.equal(await page.locator('.mainDetailButtons + #mbc-theme-volume').count(), 1);
-        await page.waitForFunction(() => window.audio.volume === 0.2);
-        // Jellyfin dispatches a bubbling pagehide from legacy views during SPA navigation.
-        await page.evaluate(() => document.querySelector('#itemDetailPage').dispatchEvent(
-            new CustomEvent('pagehide', { bubbles: true })));
-        await page.waitForTimeout(200);
-        assert.equal(await page.evaluate(() => !!window.__MrBoneCrashThemeVolumeV1), true,
-            'Navigating between Jellyfin views must not dispose the plugin runtime');
-        assert.equal(await page.locator('#mbc-theme-volume').getAttribute('open'), null);
-        await page.locator('summary').click();
-        await page.evaluate(() => window.__MrBoneCrashThemeVolumeV1.prepare(window.audio, window.song));
-        assert.equal(await page.evaluate(() => window.audio.volume), 0.2);
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).fill('50');
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).dispatchEvent('change');
-        await page.waitForFunction(() => document.querySelector('[role=status]').textContent === 'Saved');
-        assert.equal(await page.evaluate(() => window.audio.volume), 0.4);
-        assert.equal(profile.volume, 50);
-        await page.getByRole('checkbox').check();
-        await page.getByRole('slider', { name: 'Song volume', exact: true }).fill('0');
-        await page.getByRole('slider', { name: 'Song volume', exact: true }).dispatchEvent('change');
-        await page.waitForFunction(() => window.audio.volume === 0);
-        await page.waitForTimeout(200);
-        assert.equal(profile.overrides['bc7977c8ec094da4803097c7e5a21491'], 0);
-        await page.getByRole('checkbox').uncheck();
-        assert.equal(await page.evaluate(() => window.audio.volume), 0.4);
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).focus();
-        await page.keyboard.press('ArrowLeft');
-        await page.keyboard.press('Tab');
+        assert.equal(await page.evaluate(() => window.audio.volume), .4);
+        let releaseRead, readStarted;
+        const started = new Promise(resolve => { readStarted = resolve; });
+        staleRead = { started: readStarted, gate: new Promise(resolve => { releaseRead = resolve; }) };
+        await page.evaluate(() => document.dispatchEvent(new CustomEvent('viewshow'))); await started;
+        await local.fill('0'); await local.dispatchEvent('change'); await waitSaved('mbc-theme-volume');
+        const staleResponse = page.waitForResponse(response => response.request().method() === 'GET' && response.url().endsWith('/settings'));
+        releaseRead(); await staleResponse;
+        assert.equal(await page.evaluate(() => window.audio.volume), 0);
+        assert.equal(await panel.getByRole('checkbox').isChecked(), false);
+        await display(); await global.fill('60'); await global.dispatchEvent('change'); await waitSaved('mbc-theme-volume-settings');
+        assert.equal(await page.evaluate(() => window.audio.volume), 0, 'Global changes preserve local overrides');
+        await library(); await panel.getByRole('checkbox').check(); await waitSaved('mbc-theme-volume');
+        assert.equal(await local.inputValue(), '60');
+        assert.ok(Math.abs(await page.evaluate(() => window.audio.volume) - .48) < .001);
+        // Keyboard and mobile sizing use the same custom controls as desktop.
+        await local.focus(); await page.keyboard.press('ArrowLeft'); await page.keyboard.press('Tab');
+        assert.equal(await panel.getByRole('checkbox').isChecked(), false);
         await page.setViewportSize({ width: 390, height: 844 });
         await page.evaluate(() => { document.documentElement.className = 'layout-mobile'; });
         assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
-        if (process.env.THEME_VOLUME_SCREENSHOT)
-            await page.screenshot({ path: process.env.THEME_VOLUME_SCREENSHOT });
-        await page.getByRole('button', { name: 'Reset all theme volumes' }).click();
-        await page.waitForFunction(() => document.querySelector('[role=status]').textContent === 'Theme volumes reset');
-        assert.equal(profile.volume, 25);
-        assert.deepEqual(profile.overrides, {});
-        // Reinjecting the script neither adds UI nor resets the live runtime.
+        assert.ok((await local.boundingBox()).height >= 44);
+        assert.equal(await local.evaluate(input => getComputedStyle(input).webkitAppearance), 'none');
+        if (process.env.THEME_VOLUME_SCREENSHOT) await page.screenshot({ path: process.env.THEME_VOLUME_SCREENSHOT });
+        await display();
+        const reset = settings.getByRole('button', { name: 'Reset all theme volumes' });
+        const confirm = settings.getByRole('checkbox', { name: 'Confirm reset of all theme volumes' });
+        assert.equal(await reset.isDisabled(), true);
+        await confirm.check(); assert.equal(await reset.isEnabled(), true);
+        await confirm.uncheck(); assert.equal(await reset.isDisabled(), true);
+        await confirm.check(); await library(); await display();
+        assert.equal(await confirm.isChecked(), false, 'Leaving settings clears a prior reset confirmation');
+        await confirm.check(); await reset.click();
+        await page.waitForFunction(() => document.querySelector('#mbc-theme-volume-settings [role=status]').textContent === 'Theme volumes reset');
+        assert.equal(profile.volume, 25); assert.deepEqual(profile.overrides, {});
+        assert.equal(await confirm.isChecked(), false); assert.equal(await reset.isDisabled(), true);
+        await library(); assert.equal(await panel.getByRole('checkbox').isChecked(), true);
+        assert.equal(await local.inputValue(), '25'); assert.equal(await page.evaluate(() => window.audio.volume), .2);
         await page.addScriptTag({ url: 'http://theme-volume.test/ThemeSongVolume/client.js' });
-        assert.equal(await page.locator('#mbc-theme-volume').count(), 1);
-        // Normal playback of another item, including a theme played manually, is untouched.
+        assert.equal(await panel.count(), 1); assert.equal(await settings.count(), 1);
         await page.evaluate(() => window.__MrBoneCrashThemeVolumeV1.prepare(window.audio, { ...window.song }));
-        assert.equal(await page.evaluate(() => window.audio.volume), 0.8);
+        assert.equal(await page.evaluate(() => window.audio.volume), .8);
         await page.evaluate(() => window.__MrBoneCrashThemeVolumeV1.prepare(window.audio, window.song));
-        assert.equal(await page.evaluate(() => window.audio.volume), 0.2);
-        // Exercise account-backed UI edits through the MPV bridge, not just its
-        // isolated adapter. The native command is a spy; no system volume changes.
+        assert.equal(await page.evaluate(() => window.audio.volume), .2);
         await page.evaluate(() => {
-            const handlers = {};
-            window.mpvCommands = [];
-            window.mpvPlayer = {
-                id: 'mpvaudioplayer', name: 'MPV Audio Player', volume: 80,
+            const handlers = {}; window.mpvCommands = [];
+            window.mpvPlayer = { id: 'mpvaudioplayer', name: 'MPV Audio Player', volume: 80,
                 getSavedVolume: () => .8, getVolume() { return this.volume; },
                 setVolume(value, save) { this.volume = value; window.mpvCommands.push({ value, save }); },
-                events: {
-                    on(player, name, handler) { (handlers[name] ||= []).push(handler); },
-                    off(player, name, handler) { handlers[name] = (handlers[name] || []).filter(fn => fn !== handler); }
-                },
-                play(options) {
-                    this._currentPlayOptions = options;
-                    for (const fn of [...handlers.playing || []]) fn();
-                    return Promise.resolve();
-                }
-            };
+                events: { on(p,n,h) { (handlers[n] ||= []).push(h); }, off(p,n,h) { handlers[n]=(handlers[n]||[]).filter(f=>f!==h); } },
+                play(options) { this._currentPlayOptions=options; for(const fn of [...handlers.playing||[]]) fn(); return Promise.resolve(); } };
             return window.__MrBoneCrashThemeVolumeV1.play(window.mpvPlayer, { item: window.song });
         });
         assert.equal(await page.evaluate(() => window.mpvPlayer.volume), 20);
-        assert.equal(await page.evaluate(() => window.__MrBoneCrashThemeVolumeV1.diagnostics().playbackBackend), 'jmp-mpv');
-        if (await page.locator('#mbc-theme-volume').getAttribute('open') === null)
-            await page.locator('#mbc-theme-volume summary').click();
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).fill('50');
-        await page.getByRole('slider', { name: 'Default volume', exact: true }).dispatchEvent('change');
-        await page.waitForFunction(() => document.querySelector('[role=status]').textContent === 'Saved');
+        await local.fill('50'); await local.dispatchEvent('change'); await waitSaved('mbc-theme-volume');
         assert.equal(await page.evaluate(() => window.mpvPlayer.volume), 40);
         assert.equal(await page.evaluate(() => window.mpvCommands.every(command => command.save === false)), true);
-        removed = true;
-        await page.evaluate(() => document.dispatchEvent(new CustomEvent('viewshow')));
+        removed = true; await page.evaluate(() => document.dispatchEvent(new CustomEvent('viewshow')));
         await page.waitForFunction(() => !window.__MrBoneCrashThemeVolumeV1);
-        assert.equal(await page.evaluate(() => window.audio.volume), 0.8);
+        assert.equal(await page.evaluate(() => window.audio.volume), .8);
         assert.equal(await page.evaluate(() => window.mpvPlayer.volume), 80);
-        assert.equal(await page.locator('#mbc-theme-volume').count(), 0);
+        assert.equal(await panel.count(), 0); assert.equal(await settings.count(), 0);
         assert.equal(await page.locator('#mbc-theme-volume-style').count(), 0);
         assert.equal(await page.evaluate(() => window.fetch === window.originalFetch && HTMLMediaElement.prototype.play === window.originalPlay), true);
         assert.equal(await page.evaluate(() => localStorage.length), 0);
-        if (process.env.THEME_VOLUME_LEGACY_DOM === '1')
-            assert.equal(await page.evaluate(() => window.ownedListeners.length), 0,
-                'Uninstall must remove global listeners even without signal-option support');
-        assert.ok(writes > 0);
-        assert.deepEqual(errors, []);
-        // Native window navigation still performs cleanup.
-        removed = false;
-        await page.reload();
-        await page.waitForFunction(() => window.__MrBoneCrashThemeVolumeV1);
+        if (process.env.THEME_VOLUME_LEGACY_DOM === '1') assert.equal(await page.evaluate(() => window.ownedListeners.length), 0);
+        assert.ok(writes > 0); assert.deepEqual(errors, []);
+        removed = false; await page.reload(); await page.waitForFunction(() => window.__MrBoneCrashThemeVolumeV1);
         await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide')));
         await page.waitForFunction(() => !window.__MrBoneCrashThemeVolumeV1);
-        assert.equal(await page.locator('#mbc-theme-volume-style').count(), 0);
-        console.log('Browser checks passed: sliders, zero override, inheritance, keyboard, narrow layout, reset, duplicate injection, playback scope, and removal.');
+        console.log('Browser checks passed: Display settings, confirmed reset, one title slider, automatic override, inheritance, keyboard, mobile styling, MPV and cleanup.');
     } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

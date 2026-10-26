@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0.7 — Preview
+
+- Move global volume and reset to Account settings → Display, beside the theme-song option.
+- Require an explicit confirmation checkbox before resetting account preferences.
+- Simplify library controls to one title slider and a default-checked Use global
+  checkbox. Moving the slider creates an override automatically; checking Use
+  global clears it and moves the slider to the current global value.
+- Remove the song selector, global slider, and reset button from library pages.
+- Use theme-aware custom controls with touch-sized targets and keyboard focus.
+- Preserve the open panel on same-title theme refreshes and ignore stale settings
+  reads during edits. Test real Display integration, inherited values, confirmed
+  reset, account isolation, mobile layouts, legacy Qt, and custom themes.
+
 ## 0.1.0.6 — Preview
 
 - Add an isolated JMP 1.12.0 MPV audio adapter using non-persisting volume commands

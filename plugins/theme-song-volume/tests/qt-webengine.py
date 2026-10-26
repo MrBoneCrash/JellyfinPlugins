@@ -24,7 +24,7 @@ removed = False
 HTML = '''<!doctype html><html><head><script>
 window.ApiClient={getCurrentUserId:()=> 'test-user', accessToken:()=> 'fixture-token', serverAddress:()=> location.origin};
 </script><script defer src="/ThemeSongVolume/client.js"></script></head><body>
-<main class="itemDetailPage"><div class="mainDetailButtons">Play</div><div class="detailPagePrimaryContent"></div></main>
+<style>.hide{display:none}</style><main class="itemDetailPage"><div class="mainDetailButtons">Play</div><div class="detailPagePrimaryContent"></div></main><section id="displayPreferencesPage" class="hide"><div class="MuiFormControl-root"><p id="display-settings-lib-theme-songs-description">Theme songs</p></div></section>
 <script>
 window.addEventListener('load', async () => {
     const assert = (condition, message) => { if (!condition) throw new Error(message); };
@@ -45,11 +45,34 @@ window.addEventListener('load', async () => {
         bridge.prepare(audio,song,.8);
         assert(Math.abs(audio.volume-.2)<.001,'Default attenuation');
         let panel = document.getElementById('mbc-theme-volume'); panel.open=true;
-        assert(panel.querySelector('select').options.length===1,'Song dropdown must contain its song');
-        const volume = panel.querySelector('input[aria-label="Default volume"]');
+        assert(!panel.querySelector('select'),'No title selector');
+        assert(panel.querySelector('input[type=checkbox]').checked,'Use global by default');
+        const volume = panel.querySelector('input[aria-label="Theme volume"]');
+        assert(getComputedStyle(volume).webkitAppearance==='none','Consistent styled slider on the legacy engine');
+        assert(volume.getBoundingClientRect().height>=44,'Touch-sized slider');
         volume.value='50'; volume.dispatchEvent(new Event('input')); volume.dispatchEvent(new Event('change'));
         await until(() => panel.querySelector('[role=status]')?.textContent==='Saved');
         assert(Math.abs(audio.volume-.4)<.001,'Saved slider changes playback');
+        assert(!panel.querySelector('input[type=checkbox]').checked,'Slider opts out of global');
+        panel.querySelector('input[type=checkbox]').click();
+        await until(() => panel.querySelector('[role=status]')?.textContent==='Saved');
+        assert(panel.querySelector('input[type=range]').value==='25','Global check moves slider');
+        document.querySelector('.itemDetailPage').classList.add('hide');
+        document.getElementById('displayPreferencesPage').classList.remove('hide');
+        document.dispatchEvent(new CustomEvent('viewshow'));
+        await until(() => document.getElementById('mbc-theme-volume-settings'));
+        const settings=document.getElementById('mbc-theme-volume-settings');
+        const global=settings.querySelector('input[type=range]');
+        global.value='50'; global.dispatchEvent(new Event('input'));global.dispatchEvent(new Event('change'));
+        await until(() => settings.querySelector('[role=status]')?.textContent==='Saved');
+        const confirm=settings.querySelector('input[type=checkbox]'),reset=settings.querySelector('button');
+        assert(reset.disabled,'Reset needs confirmation');confirm.click();assert(!reset.disabled,'Confirm enables reset');
+        reset.click();await until(() => settings.querySelector('[role=status]')?.textContent==='Theme volumes reset');
+        assert(!confirm.checked && reset.disabled,'Reset clears confirmation');
+        document.querySelector('.itemDetailPage').classList.remove('hide');
+        document.getElementById('displayPreferencesPage').classList.add('hide');
+        document.dispatchEvent(new CustomEvent('viewshow'));
+
         // Repeat actual theme-hook/navigation ordering, with a cached hidden view.
         for(let i=0;i<3;i++) {
             const oldView=document.querySelector('.itemDetailPage:not(.hide)'); oldView.classList.add('hide');
@@ -60,7 +83,7 @@ window.addEventListener('load', async () => {
             document.dispatchEvent(new CustomEvent('viewshow'));
             panel=document.getElementById('mbc-theme-volume'); panel.open=true;
             assert(panel.closest('.itemDetailPage')===view,'Panel belongs to the active view');
-            assert(panel.querySelectorAll('input[type=range]').length===2,'Navigation preserves non-empty controls');
+            assert(panel.querySelectorAll('input[type=range]').length===1,'Navigation preserves non-empty controls');
             assert(document.querySelectorAll('#mbc-theme-volume').length===1,'Exactly one panel');
             oldView.remove();
         }
@@ -69,10 +92,11 @@ window.addEventListener('load', async () => {
         await until(() => !window.__MrBoneCrashThemeVolumeV1);
         assert(!document.getElementById('mbc-theme-volume'),'Panel cleanup');
         assert(!document.getElementById('mbc-theme-volume-style'),'Style cleanup');
+        assert(!document.getElementById('mbc-theme-volume-settings'),'Display settings cleanup');
         assert(Math.abs(audio.volume-.8)<.001,'Master volume restored');
         assert(localStorage.length===0,'No browser storage');
         console.log('QT_TEST_RESULT '+JSON.stringify({passed:true,engine:navigator.userAgent,
-            checks:['non-empty controls','song dropdown','save','theme hook returns normally','cached-view navigation','uninstall cleanup']}));
+            checks:['non-empty controls','global settings and confirmed reset','save','theme hook returns normally','cached-view navigation','uninstall cleanup']}));
     } catch(error) { console.log('QT_TEST_RESULT '+JSON.stringify({passed:false,error:String(error)})); }
 });
 </script></body></html>'''
@@ -103,6 +127,11 @@ class Handler(BaseHTTPRequestHandler):
         global profile
         profile = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
         self.respond(200, json.dumps(profile))
+
+    def do_DELETE(self):
+        global profile
+        profile = {'volume': 25, 'overrides': {}}
+        self.respond(204, '')
 
     def do_POST(self):
         global removed

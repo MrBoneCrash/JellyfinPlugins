@@ -84,7 +84,7 @@ jobs:
           name: ThemeSongVolume-live-${{ matrix.host }}-verification
           path: |
             dist/theme-song-volume-live.json
-            dist/theme-song-volume-live.png
+            dist/theme-song-volume-live*.png
   validate:
     runs-on: ubuntu-latest
     steps:

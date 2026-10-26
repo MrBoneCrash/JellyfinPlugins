@@ -1,10 +1,10 @@
 # Theme Song Volume
 
-Keep library theme songs at a comfortable volume. Choose a default level, then
-override individual songs that are louder or quieter than the rest.
+Keep library theme songs at a comfortable volume. Choose a global level for your
+account, then override individual library titles that are louder or quieter.
 
-- One default volume for all theme songs, initially 25%.
-- Optional overrides per song, including 0% to mute a particular theme.
+- Global volume in **Account settings → Display**, initially 25%.
+- One title override slider, including 0% to mute, with a **Use global** checkbox.
 - Personal settings saved on the server for your Jellyfin account.
 - A compact, collapsed **Theme volume** section below the detail-page playback buttons.
 - Playback-only changes: no edits to audio files, metadata, or your regular saved volume.
@@ -49,7 +49,7 @@ ZIP artifact from the corresponding successful GitHub Actions run.
 
 2. Install a File Transformation 3.x release compatible with Jellyfin 12.3.
 3. Extract `Jellyfin.Plugin.ThemeSongVolume.dll` from the preview ZIP into a new
-   `Theme Song Volume_0.1.0.3` folder inside your Jellyfin plugins directory.
+   `Theme Song Volume_0.1.0.7` folder inside your Jellyfin plugins directory.
 4. Restart Jellyfin and reload the client. The Jellyfin plugin dashboard also
    contains a **Theme Song Volume** information page.
 
@@ -71,15 +71,24 @@ No changes to File Transformation or any other plugin are needed for this fix.
 
 ## Use
 
-The plugin page in Jellyfin's administration dashboard is informational. The
-volume controls are on the movie or series detail page, not in that dashboard.
+The administration plugin page is informational. Global controls are beside the
+theme-song option in **Account settings → Display**, and local controls are on
+movie or series detail pages.
 
-1. Open a movie or series that has a theme song and let it start playing.
-2. Expand **Theme volume** below its playback buttons.
-3. Adjust **Default volume** to set the level for all theme songs on your account.
-4. Select a song and enable **Use a custom volume for this song** to override it.
-5. Disable that checkbox to inherit the default again, or choose
-   **Reset all theme volumes** to remove every override and restore the 25% default.
+1. Set **Global volume** in **Account settings → Display**. It saves automatically.
+2. Open a movie or series and expand **Theme volume** below its playback buttons.
+3. **Use global** is checked by default. The slider displays the inherited level.
+4. Move the slider to set a local override; **Use global** unchecks automatically.
+5. Check **Use global** to remove the title's overrides and move the slider back
+   to the current global level. The slider remains usable while inheriting.
+6. To reset everything for your account, return to **Display**, check
+   **Confirm reset of all theme volumes**, then select **Reset all theme volumes**.
+   This restores 25% globally and removes all your overrides.
+
+There is no song/title selector. A local edit applies to all theme songs supplied
+for the current title, including inherited series themes. Existing individual
+song overrides are preserved until edited; the slider shows the active theme's
+value. The reset confirmation is cleared after use and when leaving settings.
 
 Slider changes preview immediately and save when you release the slider or finish
 a keyboard adjustment. Other open clients refresh settings within approximately
@@ -121,11 +130,11 @@ node --test plugins/theme-song-volume/tests/playback.test.cjs
 python scripts/package_theme_volume.py
 ```
 
-The package is written to `dist/ThemeSongVolume-0.1.0.6.zip`. It contains the plugin
+The package is written to `dist/ThemeSongVolume-0.1.0.7.zip`. It contains the plugin
 assembly and this guide; Jellyfin's assemblies are not bundled.
 The package filename is derived from the version declared in the C# project.
-For this preview, use `0.1.0.6` in the catalog and
-`theme-song-volume-v0.1.0.6` as the GitHub release tag. Mark the GitHub release as a
+For this preview, use `0.1.0.7` in the catalog and
+`theme-song-volume-v0.1.0.7` as the GitHub release tag. Mark the GitHub release as a
 pre-release; Jellyfin itself does not support a separate pre-release flag.
 
 For browser checks:
@@ -197,6 +206,15 @@ plugins' script URLs and installed web files are left unchanged.
 The real-server browser suite also exercises an Android-style physical-volume
 host fixture. It is not an Android WebView/device test and does not verify
 ExoPlayer playback.
+
+The 0.1.0.7 controls use scoped, theme-aware slider and checkbox styling with
+44-pixel touch targets, keyboard focus indicators, and palette-aware contrast.
+Checks cover desktop/mobile layouts, the reported Ultrachromic modules, bundled
+Abyss styling, and Qt WebEngine 5.15.2. The Display section is also tested against
+Jellyfin's real React preferences page, including re-renders, confirmed reset,
+navigation, account isolation, and stale-response protection during slider edits.
+These checks do not establish styling compatibility with every third-party theme
+or verification on physical Android/iOS devices.
 
 For troubleshooting, this read-only console command reports runtime readiness
 without disclosing authentication tokens or user identifiers:
