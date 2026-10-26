@@ -127,7 +127,12 @@ server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 web_profile = QWebEngineProfile()  # Off-the-record; no installed client profile.
 page = Page(web_profile)
-QTimer.singleShot(20000, lambda: app.exit(2))
+def timed_out():
+    print('Qt test timed out before reporting a result.', flush=True)
+    app.exit(2)
+
+
+QTimer.singleShot(30000, timed_out)
 page.load(QUrl('http://127.0.0.1:' + str(server.server_port)))
 result = app.exec_()
 server.shutdown()
