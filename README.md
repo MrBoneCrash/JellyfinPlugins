@@ -8,7 +8,7 @@ catalog. Add this repository once to access the plugins and their future updates
 | Plugin | Features | Requirements | Status |
 | --- | --- | --- | --- |
 | [Theme Song Volume](plugins/theme-song-volume/README.md) | Default theme-song volume and individual song overrides, without changing audio files. | Jellyfin 12.3, File Transformation 3.x, compatible server-hosted Web client. | Preview; see the plugin guide for installation and fixes. |
-| [Abyss Theme](plugins/abyss-theme/README.md) | Persistent Abyss CSS by Om Gupta (AumGupta), optional theme updates, rollback and plugin adaptations. | Jellyfin 12.3, File Transformation 3.x, compatible server-hosted Web client with Dark selected. | Preview; available in the plugin catalog. |
+| [Abyss Theme](plugins/abyss-theme/README.md) | Abyss by Om Gupta (AumGupta), including Spotlight, Lite mode, configurable appearance/layout, optional updates and recovery. | Jellyfin 12.3, File Transformation 3.x, compatible server-hosted Web client. | Preview; available in the plugin catalog. |
 
 ## Installation
 
