@@ -64,7 +64,7 @@ def main():
             body = response.read().decode()
             return body if raw else json.loads(body) if body else None
 
-    def start():
+    def start(initial_setup=False):
         nonlocal child
         log = (test / f'server-{len(handles)}.log').open('w', encoding='utf-8')
         handles.append(log)
@@ -78,6 +78,8 @@ def main():
                 raise RuntimeError(f'Test server exited; inspect {test}')
             try:
                 request('/System/Info/Public')
+                if initial_setup:
+                    request('/Startup/User')
                 return
             except (OSError, ValueError):
                 time.sleep(1)
@@ -108,7 +110,7 @@ def main():
             raise AssertionError('Administration endpoint allowed unauthorized access: ' + route)
 
     try:
-        start()
+        start(initial_setup=True)
         request('/Startup/User')
         password = secrets.token_urlsafe(24)
         request('/Startup/User', 'POST', {'Name': 'abyss-test', 'Password': password})
