@@ -25,11 +25,13 @@
         }
 
         return {
-            prepare(element, song) {
+            prepare(element, song, masterVolume) {
                 release(element);
                 if (disposed || !song) return;
                 const id = normalizeId(song.Id);
-                const state = { base: element.volume, applied: element.volume * factor(id), id, active: true };
+                const base = Number.isFinite(masterVolume) && masterVolume >= 0 && masterVolume <= 1
+                    ? masterVolume : element.volume;
+                const state = { base, applied: base * factor(id), id, active: true };
                 states.set(element, state);
                 element.volume = state.applied;
             },
@@ -43,6 +45,9 @@
                 }
             },
             shouldPersist: element => !states.has(element),
+            diagnostics: () => [...states].map(([element, state]) => ({
+                masterVolume: state.base, appliedVolume: state.applied, currentVolume: element.volume, active: state.active
+            })),
             release,
             reset() { for (const element of states.keys()) release(element); },
             dispose() {
@@ -96,7 +101,7 @@
         const response = await fetch(endpoint, {
             method, cache: 'no-store', credentials: 'same-origin', signal: abort.signal,
             headers: {
-                'X-Emby-Token': client.accessToken(),
+                'Authorization': `MediaBrowser Token="${client.accessToken()}"`,
                 ...(value ? { 'Content-Type': 'application/json' } : {})
             },
             body: value ? JSON.stringify(value) : undefined
@@ -142,7 +147,7 @@
             loaded = true;
             playback.setProfile(profile);
             if (pendingPlayback && knownThemes.has(pendingPlayback.item)) {
-                playback.prepare(pendingPlayback.audio, pendingPlayback.item);
+                playback.prepare(pendingPlayback.audio, pendingPlayback.item, pendingPlayback.masterVolume);
                 pendingPlayback = null;
             }
             mount();
@@ -203,7 +208,11 @@
         const body = element('div');
         body.dataset.body = 'true';
         panel.append(body);
-        anchor.insertAdjacentElement('afterend', panel);
+        // The ribbon lays metadata and buttons out horizontally. Keep our
+        // expandable controls in the content below it, rather than adding a column.
+        const content = view.querySelector('.detailPagePrimaryContent');
+        if (content) content.prepend(panel);
+        else anchor.insertAdjacentElement('afterend', panel);
         render();
     }
 
@@ -344,7 +353,7 @@
     const bridge = {
         diagnostics() {
             return Object.freeze({ settingsLoaded: loaded, playerReady, themeSongCount: songs.length,
-                controlsCreated: !!panel?.isConnected, connectedToServer: !!api() });
+                controlsCreated: !!panel?.isConnected, connectedToServer: !!api(), playback: playback.diagnostics() });
         },
         audioReady() { if (!playerReady) { playerReady = true; mount(); render(); } },
         themes(items) {
@@ -355,11 +364,11 @@
             removePanel(); mount();
             return items; // Preserve the original array and its item identities.
         },
-        prepare(audio, item) {
+        prepare(audio, item, masterVolume) {
             if (api()?.getCurrentUserId() !== userId) { pendingPlayback = null; void refresh(); playback.release(audio); return; }
             const theme = knownThemes.has(item);
-            pendingPlayback = theme && !loaded ? { audio, item } : null;
-            playback.prepare(audio, loaded && theme ? item : null);
+            pendingPlayback = theme && !loaded ? { audio, item, masterVolume } : null;
+            playback.prepare(audio, loaded && theme ? item : null, masterVolume);
         },
         shouldPersist: playback.shouldPersist,
         dispose

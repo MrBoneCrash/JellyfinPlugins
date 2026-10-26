@@ -30,7 +30,7 @@ const assert = require('node:assert/strict');
             if (url.pathname.endsWith('client.js')) return route.fulfill({ contentType: 'application/javascript',
                 body: fs.readFileSync(path.join(__dirname, '../src/Web/client.js'), 'utf8') });
             if (url.pathname.endsWith('/settings')) {
-                assert.equal(route.request().headers()['x-emby-token'], 'fixture-only-token');
+                assert.equal(route.request().headers()['authorization'], 'MediaBrowser Token="fixture-only-token"');
                 if (firstRead && route.request().method() === 'GET') {
                     firstRead = false;
                     await new Promise(resolve => setTimeout(resolve, 200));

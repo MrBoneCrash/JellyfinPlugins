@@ -68,6 +68,21 @@ test('session reset permits the next authenticated session', () => {
     assert.equal(audio.volume, 0.2);
 });
 
+test('core fade restoration on a reused element cannot compound theme attenuation', () => {
+    const { playback, flush } = setup();
+    const audio = { volume: 0.8 };
+    playback.prepare(audio, song, 0.8);
+    playback.release(audio); flush();
+    // Jellyfin stop() restores the volume captured before its fade began.
+    audio.volume = 0.2;
+    playback.prepare(audio, song, 0.8);
+    assert.equal(audio.volume, 0.2);
+    playback.setProfile({ volume: 50, overrides: {} });
+    assert.equal(audio.volume, 0.4);
+    playback.dispose(); flush();
+    assert.equal(audio.volume, 0.8);
+});
+
 test('disposal restores volume and is safe to repeat', () => {
     const { playback, flush } = setup();
     const audio = { volume: 0.8 };

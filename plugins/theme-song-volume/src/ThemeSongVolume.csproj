@@ -6,7 +6,7 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AssemblyName>Jellyfin.Plugin.ThemeSongVolume</AssemblyName>
     <RootNamespace>Jellyfin.Plugin.ThemeSongVolume</RootNamespace>
-    <Version>0.1.0.3</Version>
+    <Version>0.1.0.4</Version>
   </PropertyGroup>
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />

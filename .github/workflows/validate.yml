@@ -10,6 +10,38 @@ permissions:
   contents: read
 
 jobs:
+  theme-song-volume-live:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build the plugin
+        run: dotnet build plugins/theme-song-volume/src/ThemeSongVolume.csproj -c Release
+      - name: Install browser dependencies
+        working-directory: plugins/theme-song-volume
+        run: npm ci
+      - name: Install Chromium
+        working-directory: plugins/theme-song-volume
+        run: npx playwright install chromium
+      - name: Test real Jellyfin playback and uninstall
+        env:
+          NODE_PATH: ${{ github.workspace }}/plugins/theme-song-volume/node_modules
+        run: python scripts/test_theme_volume_live.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ThemeSongVolume-live-verification
+          path: |
+            dist/theme-song-volume-live.json
+            dist/theme-song-volume-live.png
   validate:
     runs-on: ubuntu-latest
     steps:

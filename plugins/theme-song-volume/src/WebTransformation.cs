@@ -14,8 +14,14 @@ public static class WebTransformation
     private static readonly Regex SaveVolume = new(
         @"(?:\(0,\s*[\w$]+\.saveVolume\)|[\w$]+(?:\.[\w$]+)*\.saveVolume)\(this\.volume\)",
         RegexOptions.CultureInvariant, Timeout);
+    private static readonly Regex BundledSaveVolume = new(
+        @"(?<prefix>[\w$]+\._isFadingOut\s*\|\|\s*\()(?<call>(?:\(0,\s*[\w$]+\.[\w$]+\)|[\w$]+(?:\.[\w$]+)+)\(this\.volume\))",
+        RegexOptions.CultureInvariant, Timeout);
     private static readonly Regex Prepare = new(
         @"(?<prefix>function(?:\s+[\w$]+)?\s*\(\s*(?<element>[\w$]+)\s*,\s*(?<options>[\w$]+)\s*\)\s*\{\s*)(?=[\w$]+\(\s*\k<element>\s*\))(?=[\s\S]{0,900}?(?:let|const|var)\s+[\w$]+\s*=\s*\k<options>\.url\s*;\s*console\.debug\(['""]playing url: )",
+        RegexOptions.CultureInvariant, Timeout);
+    private static readonly Regex SavedVolume = new(
+        @"[\w$]+\.volume\s*=\s*(?<getter>(?:\(0,\s*[\w$]+\.[\w$]+\)|[\w$]+(?:\.[\w$]+)+)\(\))",
         RegexOptions.CultureInvariant, Timeout);
 
     public static string Transform(JObject payload)
@@ -48,14 +54,35 @@ public static class WebTransformation
                 changed = true;
             }
             if (contents.Contains("htmlaudioplayer", StringComparison.Ordinal) &&
-                contents.Contains("Html Audio Player", StringComparison.Ordinal) && SaveVolume.Matches(contents).Count == 1 &&
-                Prepare.Matches(contents).Count == 1)
+                contents.Contains("Html Audio Player", StringComparison.Ordinal) && Prepare.Matches(contents).Count == 1)
             {
-                contents = SaveVolume.Replace(contents, match =>
-                    $"((globalThis.{Runtime}?.shouldPersist(this)??true)&&{match.Value})");
-                contents = Prepare.Replace(contents, match => match.Groups["prefix"].Value +
-                    $"globalThis.{Runtime}?.audioReady();globalThis.{Runtime}?.prepare({match.Groups["element"].Value},{match.Groups["options"].Value}.item);");
-                changed = true;
+                var namedMatches = SaveVolume.Matches(contents).Count;
+                var patchedAudio = false;
+                if (namedMatches == 1)
+                {
+                    contents = SaveVolume.Replace(contents, match =>
+                        $"((globalThis.{Runtime}?.shouldPersist(this)??true)&&{match.Value})");
+                    patchedAudio = true;
+                }
+                else if (namedMatches == 0 && BundledSaveVolume.Matches(contents).Count == 1)
+                {
+                    // Webpack renames exports such as saveVolume to short aliases.
+                    // The fade guard identifies the original volume-change handler.
+                    contents = BundledSaveVolume.Replace(contents, match => match.Groups["prefix"].Value +
+                        $"((globalThis.{Runtime}?.shouldPersist(this)??true)&&{match.Groups["call"].Value})");
+                    patchedAudio = true;
+                }
+                if (patchedAudio)
+                {
+                    // The core reuses audio elements and restores their previous
+                    // (attenuated) volume after fades. Read its saved master volume
+                    // through the same helper used to initialize new elements.
+                    var savedVolume = SavedVolume.Matches(contents);
+                    var master = savedVolume.Count == 1 ? "," + savedVolume[0].Groups["getter"].Value : "";
+                    contents = Prepare.Replace(contents, match => match.Groups["prefix"].Value +
+                        $"globalThis.{Runtime}?.audioReady();globalThis.{Runtime}?.prepare({match.Groups["element"].Value},{match.Groups["options"].Value}.item{master});");
+                    changed = true;
+                }
             }
             return changed ? Marker + "\n" + contents : contents;
         }

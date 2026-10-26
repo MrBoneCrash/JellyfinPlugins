@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0.3",
+  "version": "0.1.0.4",
   "targetAbi": "12.3.0.0",
   "prerelease": true,
   "revision": 1,
-  "changelog": "[PREVIEW] Keep the web integration alive during Jellyfin page navigation and fix settings JSON field names. Tested with the reported Ultrachromic CSS modules. Requires Jellyfin 12.3 and File Transformation 3.x; native playback remains unsupported."
+  "changelog": "[PREVIEW] Fix the audio hook in official Jellyfin Web bundles and settings authentication. Verified with real Jellyfin 12.3.0, File Transformation 3.0.2.0, and Windows Chrome, including playback and uninstall. Native Windows/Android playback remains unsupported."
 }

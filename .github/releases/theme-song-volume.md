@@ -1,39 +1,26 @@
-# Theme Song Volume 0.1.0.3 Preview
+# Theme Song Volume 0.1.0.4 Preview
 
-Fixes the integration disappearing during ordinary Jellyfin Web navigation.
-Jellyfin's legacy pages emit bubbling `pagehide` events, which previously caused
-the plugin to shut itself down. Cleanup now distinguishes these view changes
-from a real browser-window departure.
+Fixes missing theme-volume controls with the official Jellyfin Web 12.3 bundles.
+The audio hook now recognizes Webpack's renamed volume-saving function, and
+settings requests use the MediaBrowser Authorization header accepted by the server.
+Also prevents repeated attenuation when Jellyfin reuses its audio player after a fade.
 
-Also fixes settings serialization: `volume` and `overrides` now keep their
-expected names under Jellyfin's PascalCase JSON defaults. The browser checks use
-an actual Jellyfin-serialized settings response. The reported 15 Ultrachromic CSS
-modules were also tested locally at desktop and mobile widths.
-
-The plugin's administration page remains informational. Open a movie or series
-whose theme song is playing, then expand **Theme volume** below the play buttons.
-
-## Requirements
-
-- Jellyfin Server 12.3.
-- File Transformation 3.x compatible with your server.
-- A compatible server-hosted Jellyfin Web interface. Native Windows and Android
-  playback paths are not guaranteed to work.
+Verified on an isolated real Jellyfin 12.3.0 server with File Transformation 3.0.2.0
+and Windows Chrome using synthetic media. Checks cover visible controls, default
+volume, individual mute, persistence, navigation, normal movie volume, reset,
+uninstall cleanup, and unchanged source media/web files. The reported Ultrachromic
+stylesheet modules were also checked locally. GitHub Actions runs the real-server
+test before publishing this release.
 
 ## Updating
 
-If the plugin dashboard opens, update Theme Song Volume from the catalog and
-restart Jellyfin. Reload the client after the restart.
+Update Theme Song Volume from the catalog, restart Jellyfin, and reload the client.
+Open a movie or series whose theme song is playing, then expand **Theme volume**
+below the playback buttons. The administration page remains informational.
 
-If the old plugin prevents the dashboard from loading, stop Jellyfin, move the
-old Theme Song Volume installation folder out of the plugins directory, and
-extract this release ZIP into `Theme Song Volume_0.1.0.3` inside the plugins
-directory. Start Jellyfin again. Keep the plugin configurations directory to
-retain your saved theme-volume preferences.
+Requires Jellyfin Server 12.3 and File Transformation 3.x compatible with your
+server. Native Windows and Android clients have not been device-tested; native
+playback and separately bundled web interfaces are not supported automatically.
 
-## Preview status
-
-Server-side tests, playback-isolation tests, and browser-fixture checks pass.
-Real-server and Windows/Android device verification is still required.
-Jellyfin catalogs do not have a separate pre-release flag; this version remains
-installable through the manifest and is identified as a preview in its text.
+This GitHub release is a pre-release. Jellyfin catalogs have no separate
+pre-release flag; the manifest identifies it as a preview in its text.

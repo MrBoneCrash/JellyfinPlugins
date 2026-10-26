@@ -23,7 +23,7 @@ of 20%. An override replaces the default multiplier; it is not multiplied twice.
 
 | Client | Scope |
 | --- | --- |
-| Jellyfin Web served by this server | Implementation targets the 12.3 theme and HTML audio players. Browser fixture tested; a live-server test is still required. |
+| Jellyfin Web served by this server | Verified with official Jellyfin 12.3.0, File Transformation 3.0.2.0, and Chrome on Windows using real playback. Other browser engines remain unverified. |
 | Windows clients | Can work when they load this server's web interface and use its HTML audio player. Native playback paths and bundled web interfaces are not supported. Not device-tested. |
 | Android app | Can work for theme songs played by the server-hosted web interface using its HTML audio player. Native/external players are not supported. Not device-tested. |
 | Android TV, native clients, casting, separately hosted Web | No automatic support. Their own players/UI do not load these extensions. |
@@ -120,11 +120,11 @@ node --test plugins/theme-song-volume/tests/playback.test.cjs
 python scripts/package_theme_volume.py
 ```
 
-The package is written to `dist/ThemeSongVolume-0.1.0.3.zip`. It contains the plugin
+The package is written to `dist/ThemeSongVolume-0.1.0.4.zip`. It contains the plugin
 assembly and this guide; Jellyfin's assemblies are not bundled.
 The package filename is derived from the version declared in the C# project.
-For this preview, use `0.1.0.3` in the catalog and
-`theme-song-volume-v0.1.0.3` as the GitHub release tag. Mark the GitHub release as a
+For this preview, use `0.1.0.4` in the catalog and
+`theme-song-volume-v0.1.0.4` as the GitHub release tag. Mark the GitHub release as a
 pre-release; Jellyfin itself does not support a separate pre-release flag.
 
 For browser checks:
@@ -138,15 +138,31 @@ npm run test:browser
 
 Tests cover volume inheritance, zero-volume overrides, regular playback isolation,
 settings validation and account separation, owned-data cleanup, response-transform
-guards, duplicate initialization, responsive controls, and browser cleanup. Browser
-tests use a simulated server and real HTML media elements; they do not establish
-compatibility with a real Jellyfin installation or native clients.
+guards, duplicate initialization, responsive controls, and browser cleanup. The
+fast browser tests use a simulated server and real HTML media elements.
+
+For a real server test on Windows, after building Release and installing Playwright:
+
+```powershell
+$env:NODE_PATH = Join-Path (Get-Location) 'plugins/theme-song-volume/node_modules'
+python scripts/test_theme_volume_live.py
+```
+
+This downloads the official portable Jellyfin 12.3.0 server and File Transformation
+3.0.2.0, creates a loopback-only server with a disposable account and synthetic
+movie/theme, and tests actual playback, settings persistence, navigation, normal
+movie volume, reset, and uninstall. It verifies that the source theme and installed
+web files remain unchanged, then stops its own server process. Test data and
+credentials remain under ignored `.tools`; reports and a screenshot are in `dist`.
+GitHub Actions runs this test before publishing. No production server is used.
 
 The browser checks include Jellyfin's bubbling legacy `pagehide` events and a
 settings response generated with `JsonDefaults.PascalCaseOptions`. Version 0.1.0.3
 was also checked locally with the reported 15 Ultrachromic CSS modules, including
 `title_banner-logo.css`, at desktop and mobile widths. This does not establish
 compatibility with every Ultrachromic configuration or future stylesheet changes.
+The real-server test for 0.1.0.4 also verified the reported stylesheet modules on
+Windows Chrome at desktop width. Native Windows and Android apps remain untested.
 
 For troubleshooting, this read-only console command reports runtime readiness
 without disclosing authentication tokens or user identifiers:
@@ -158,5 +174,5 @@ window.__MrBoneCrashThemeVolumeV1?.diagnostics()
 The web hooks are based on the
 [Jellyfin Web 12.3 theme player](https://github.com/jellyfin/jellyfin-web/blob/v12.3/src/components/themeMediaPlayer.js)
 and [HTML audio player](https://github.com/jellyfin/jellyfin-web/blob/v12.3/src/plugins/htmlAudioPlayer/plugin.js).
-Before publishing a catalog release, verify playback and uninstall on a real server,
-including your installed plugins and the intended Windows/Android clients.
+Additional installed plugins and the intended Windows/Android clients require
+their own verification; the isolated test does not establish support for them.

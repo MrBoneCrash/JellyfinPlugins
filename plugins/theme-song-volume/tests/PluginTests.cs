@@ -100,6 +100,31 @@ public sealed class PluginTests : IDisposable
     }
 
     [Fact]
+    public void OfficialWebpackAudioExportsReceiveThePersistenceGuard()
+    {
+        const string source = "const name='Html Audio Player',id='htmlaudioplayer';function source(e,o){unbind(e);var u=o.url;console.debug('playing url: '+u);}function changed(){p._isFadingOut||(c.iP(this.volume),Events.trigger(p,'volumechange'))}function create(){a.volume=c.Y3()}";
+        var result = WebTransformation.Apply(source);
+        Assert.Contains("shouldPersist(this)", result);
+        Assert.Contains("audioReady()", result);
+        Assert.Contains("prepare(e,o.item,c.Y3())", result);
+        Assert.Equal(result, WebTransformation.Apply(result));
+    }
+
+    [Fact]
+    public void VerifyOfficialDistributionBundlesWhenProvided()
+    {
+        var directory = Environment.GetEnvironmentVariable("THEME_VOLUME_OFFICIAL_WEB");
+        if (directory is null) return;
+        var main = File.ReadAllText(Path.Combine(directory, "main.jellyfin.bundle.js"));
+        Assert.Contains(".themes(", WebTransformation.Apply(main));
+        var audioPath = Assert.Single(Directory.GetFiles(directory, "htmlAudioPlayer-plugin.*.chunk.js"));
+        var audio = File.ReadAllText(audioPath);
+        var transformed = WebTransformation.Apply(audio);
+        Assert.Contains("shouldPersist(this)", transformed);
+        Assert.Contains("audioReady()", transformed);
+    }
+
+    [Fact]
     public void ThemeIntegrationOnlyMarksAutomaticThemePlayback()
     {
         var source = "p.play({items:songs,aspectRatio:'cover',fullscreen:false,enableRemotePlayers:false});console.error('[ThemeMediaPlayer] failed to load theme media');";
