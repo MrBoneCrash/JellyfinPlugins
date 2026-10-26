@@ -1,0 +1,8 @@
+{
+  "guid": "de52c4ed-29ee-4e5f-b722-485dcd5503f0",
+  "name": "Abyss Theme",
+  "overview": "[PREVIEW] Load Abyss automatically after server restarts and updates.",
+  "description": "[PREVIEW] Bundled Abyss CSS by Om Gupta (AumGupta), MIT licensed: https://github.com/AumGupta/abyss-jellyfin. Requires Jellyfin 12.3, File Transformation 3.x, and compatible server-hosted Jellyfin Web with the Dark base theme. Native clients and the separate dashboard are not supported.",
+  "owner": "MrBoneCrash",
+  "category": "General"
+}
