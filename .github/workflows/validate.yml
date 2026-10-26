@@ -52,6 +52,9 @@ jobs:
   theme-song-volume-live:
     runs-on: windows-latest
     timeout-minutes: 15
+    strategy:
+      matrix:
+        host: [desktop, physical]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -74,10 +77,11 @@ jobs:
       - name: Test real Jellyfin playback and uninstall
         env:
           NODE_PATH: ${{ github.workspace }}/plugins/theme-song-volume/node_modules
+          THEME_VOLUME_PHYSICAL_HOST: ${{ matrix.host == 'physical' && '1' || '0' }}
         run: python scripts/test_theme_volume_live.py
       - uses: actions/upload-artifact@v4
         with:
-          name: ThemeSongVolume-live-verification
+          name: ThemeSongVolume-live-${{ matrix.host }}-verification
           path: |
             dist/theme-song-volume-live.json
             dist/theme-song-volume-live.png
@@ -110,7 +114,11 @@ jobs:
           THEME_VOLUME_SETTINGS_OUTPUT: ${{ runner.temp }}/theme-volume-settings.json
         run: dotnet test plugins/theme-song-volume/tests/ThemeSongVolume.Tests.csproj -c Release
       - name: Test playback isolation and cleanup
-        run: node --test plugins/theme-song-volume/tests/playback.test.cjs
+        env:
+          THEME_VOLUME_MPV_SOURCE: ${{ runner.temp }}/mpvAudioPlayer-1.12.js
+        run: |
+          python -c "import os,urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/jellyfin/jellyfin-desktop/v1.12.0/native/mpvAudioPlayer.js', os.environ['THEME_VOLUME_MPV_SOURCE'])"
+          node --test plugins/theme-song-volume/tests/playback.test.cjs plugins/theme-song-volume/tests/mpv.test.cjs
       - name: Install browser test dependencies
         working-directory: plugins/theme-song-volume
         run: npm ci

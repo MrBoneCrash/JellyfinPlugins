@@ -77,6 +77,25 @@ const assert = require('node:assert/strict');
         });
         await page.goto('http://theme-volume.test/web/index.html');
         await page.waitForFunction(() => window.__MrBoneCrashThemeVolumeV1);
+        // Reading account settings must not falsely promise playback support.
+        // Editing remains possible even before a supported player has appeared.
+        await page.evaluate(() => {
+            window.__unsupportedTheme = { Id: 'bc7977c8ec094da4803097c7e5a21491', MediaType: 'Audio', Name: 'Theme' };
+            window.__MrBoneCrashThemeVolumeV1.themes([window.__unsupportedTheme]);
+        });
+        await page.waitForSelector('#mbc-theme-volume');
+        if (await page.locator('#mbc-theme-volume').getAttribute('open') === null)
+            await page.locator('#mbc-theme-volume summary').click();
+        assert.equal(await page.getByRole('slider', { name: 'Default volume', exact: true }).isEnabled(), true);
+        assert.equal(await page.locator('[data-capability]').isVisible(), true);
+        await page.getByRole('slider', { name: 'Default volume', exact: true }).fill('35');
+        await page.getByRole('slider', { name: 'Default volume', exact: true }).dispatchEvent('change');
+        await page.waitForFunction(() => document.querySelector('[role=status]').textContent === 'Saved');
+        assert.equal(profile.volume, 35);
+        // Restore the starting profile through the UI before playback assertions.
+        await page.getByRole('slider', { name: 'Default volume', exact: true }).fill('25');
+        await page.getByRole('slider', { name: 'Default volume', exact: true }).dispatchEvent('change');
+        await page.waitForFunction(() => document.querySelector('[role=status]').textContent === 'Saved');
         await page.evaluate(() => {
             window.originalFetch = window.fetch;
             window.originalPlay = HTMLMediaElement.prototype.play;
@@ -136,10 +155,41 @@ const assert = require('node:assert/strict');
         assert.equal(await page.evaluate(() => window.audio.volume), 0.8);
         await page.evaluate(() => window.__MrBoneCrashThemeVolumeV1.prepare(window.audio, window.song));
         assert.equal(await page.evaluate(() => window.audio.volume), 0.2);
+        // Exercise account-backed UI edits through the MPV bridge, not just its
+        // isolated adapter. The native command is a spy; no system volume changes.
+        await page.evaluate(() => {
+            const handlers = {};
+            window.mpvCommands = [];
+            window.mpvPlayer = {
+                id: 'mpvaudioplayer', name: 'MPV Audio Player', volume: 80,
+                getSavedVolume: () => .8, getVolume() { return this.volume; },
+                setVolume(value, save) { this.volume = value; window.mpvCommands.push({ value, save }); },
+                events: {
+                    on(player, name, handler) { (handlers[name] ||= []).push(handler); },
+                    off(player, name, handler) { handlers[name] = (handlers[name] || []).filter(fn => fn !== handler); }
+                },
+                play(options) {
+                    this._currentPlayOptions = options;
+                    for (const fn of [...handlers.playing || []]) fn();
+                    return Promise.resolve();
+                }
+            };
+            return window.__MrBoneCrashThemeVolumeV1.play(window.mpvPlayer, { item: window.song });
+        });
+        assert.equal(await page.evaluate(() => window.mpvPlayer.volume), 20);
+        assert.equal(await page.evaluate(() => window.__MrBoneCrashThemeVolumeV1.diagnostics().playbackBackend), 'jmp-mpv');
+        if (await page.locator('#mbc-theme-volume').getAttribute('open') === null)
+            await page.locator('#mbc-theme-volume summary').click();
+        await page.getByRole('slider', { name: 'Default volume', exact: true }).fill('50');
+        await page.getByRole('slider', { name: 'Default volume', exact: true }).dispatchEvent('change');
+        await page.waitForFunction(() => document.querySelector('[role=status]').textContent === 'Saved');
+        assert.equal(await page.evaluate(() => window.mpvPlayer.volume), 40);
+        assert.equal(await page.evaluate(() => window.mpvCommands.every(command => command.save === false)), true);
         removed = true;
         await page.evaluate(() => document.dispatchEvent(new CustomEvent('viewshow')));
         await page.waitForFunction(() => !window.__MrBoneCrashThemeVolumeV1);
         assert.equal(await page.evaluate(() => window.audio.volume), 0.8);
+        assert.equal(await page.evaluate(() => window.mpvPlayer.volume), 80);
         assert.equal(await page.locator('#mbc-theme-volume').count(), 0);
         assert.equal(await page.locator('#mbc-theme-volume-style').count(), 0);
         assert.equal(await page.evaluate(() => window.fetch === window.originalFetch && HTMLMediaElement.prototype.play === window.originalPlay), true);

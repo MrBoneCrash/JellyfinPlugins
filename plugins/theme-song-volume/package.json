@@ -2,7 +2,7 @@
   "name": "theme-song-volume-tests",
   "private": true,
   "scripts": {
-    "test": "node --test tests/playback.test.cjs",
+    "test": "node --test tests/playback.test.cjs tests/mpv.test.cjs",
     "test:browser": "node tests/browser.cjs"
   },
   "devDependencies": {

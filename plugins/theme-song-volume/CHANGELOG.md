@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.0.6 — Preview
+
+- Add an isolated JMP 1.12.0 MPV audio adapter using non-persisting volume commands
+  for automatic theme songs. Restore master volume after fades and on removal.
+- Version the main/runtime bootstrap and dynamic chunk URLs so app caches do not
+  keep untransformed audio hooks across plugin upgrades.
+- Allow account settings to be edited when local playback control is unavailable.
+  Keep a separate, persistent capability notice instead of disabled synced sliders.
+- Report the recognized playback backend in read-only diagnostics.
+- Test native scope, mute, ordinary playback, fade/restoration and cleanup against
+  the official JMP audio class with a simulated native bridge. Actual Windows
+  sound output and Android app playback still require device verification.
+
 ## 0.1.0.5 — Preview
 
 - Fix empty or intermittent theme-volume controls in Jellyfin Media Player with

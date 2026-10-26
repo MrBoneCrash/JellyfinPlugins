@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0.5",
+  "version": "0.1.0.6",
   "targetAbi": "12.3.0.0",
   "prerelease": true,
   "revision": 1,
-  "changelog": "[PREVIEW] Fix empty theme-volume controls on Jellyfin Media Player's Chromium 83 engine and remove listeners explicitly on uninstall. Verified against actual Qt WebEngine 5.15.2. Native playback remains unsupported."
+  "changelog": "[PREVIEW] Add a scoped JMP 1.12.0 MPV theme-volume adapter, refresh cached web hooks on upgrades, and allow account settings edits on unsupported players. Native commands are tested against the official JMP class with a simulated bridge; actual Windows sound output and Android playback remain unverified."
 }

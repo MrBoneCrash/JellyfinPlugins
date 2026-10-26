@@ -24,15 +24,16 @@ of 20%. An override replaces the default multiplier; it is not multiplied twice.
 | Client | Scope |
 | --- | --- |
 | Jellyfin Web served by this server | Verified with official Jellyfin 12.3.0, File Transformation 3.0.2.0, and Chrome on Windows using real playback. Other browser engines remain unverified. |
-| Windows clients | Empty controls were reproduced in the installed Jellyfin Media Player with Qt WebEngine 5.15.2 / Chromium 83. Fixed UI behavior is verified on that exact engine. Volume control still requires the server-hosted web interface and HTML audio player; native playback paths and bundled web interfaces remain unsupported. |
-| Android app | Can work for theme songs played by the server-hosted web interface using its HTML audio player. Native/external players are not supported. Not device-tested. |
+| Windows clients | Adds an MPV audio adapter for Jellyfin Media Player 1.12.0 using the server-hosted web interface. Volume commands, master-volume preservation, fades and cleanup are tested with the official JMP audio class and a simulated native bridge. Actual device audio still needs verification. UI compatibility is tested on Qt WebEngine 5.15.2 / Chromium 83. |
+| Android app | Targets theme songs played through server-hosted HTML audio. Upgrades version the injected bundles so older cached hooks are not reused. Android device playback remains unverified; ExoPlayer/native/external playback paths have no volume adapter. |
 | Android TV, native clients, casting, separately hosted Web | No automatic support. Their own players/UI do not load these extensions. |
 
 A server plugin cannot guarantee volume control in every client without client
 support. No session-wide volume commands are sent as a fallback, since they could
 change normal playback or another device's volume. Unsupported web integration
-points are left unchanged. If the theme hook loads but the audio hook is unavailable,
-the controls remain disabled and explain the limitation.
+points are left unchanged. Saved account settings can be edited even when playback
+control is unavailable. A persistent notice explains that these changes apply only
+on supported players; synced settings alone do not establish playback support.
 
 ## Install the preview
 
@@ -120,11 +121,11 @@ node --test plugins/theme-song-volume/tests/playback.test.cjs
 python scripts/package_theme_volume.py
 ```
 
-The package is written to `dist/ThemeSongVolume-0.1.0.5.zip`. It contains the plugin
+The package is written to `dist/ThemeSongVolume-0.1.0.6.zip`. It contains the plugin
 assembly and this guide; Jellyfin's assemblies are not bundled.
 The package filename is derived from the version declared in the C# project.
-For this preview, use `0.1.0.5` in the catalog and
-`theme-song-volume-v0.1.0.5` as the GitHub release tag. Mark the GitHub release as a
+For this preview, use `0.1.0.6` in the catalog and
+`theme-song-volume-v0.1.0.6` as the GitHub release tag. Mark the GitHub release as a
 pre-release; Jellyfin itself does not support a separate pre-release flag.
 
 For browser checks:
@@ -179,6 +180,23 @@ python plugins/theme-song-volume/tests/qt-webengine.py
 It creates a hidden, disposable web page using a loopback fixture. It does not
 read or modify the installed client's profile, credentials, or settings. Actions
 runs it before publishing, alongside the real-server playback test.
+
+The 0.1.0.6 MPV adapter is checked against the official JMP 1.12.0
+[`mpvAudioPlayer.js`](https://github.com/jellyfin/jellyfin-desktop/blob/v1.12.0/native/mpvAudioPlayer.js).
+It uses the player's non-persisting volume command, applies it only to marked
+automatic theme items, and restores the master after the native fade ends.
+Tests exercise the official JavaScript class with a simulated C++ bridge; they do
+not measure sound output on Windows. No Android/system-wide volume commands are
+used as a fallback. The Android integrated-player selection does not by itself
+identify the player used for background theme audio.
+
+The read-only diagnostic snapshot includes `playbackBackend`: `html-audio`,
+`jmp-mpv`, or `unavailable`. Versioned main/runtime and dynamic chunk URLs prevent
+old transformed bundles from surviving a plugin upgrade in app caches. Other
+plugins' script URLs and installed web files are left unchanged.
+The real-server browser suite also exercises an Android-style physical-volume
+host fixture. It is not an Android WebView/device test and does not verify
+ExoPlayer playback.
 
 For troubleshooting, this read-only console command reports runtime readiness
 without disclosing authentication tokens or user identifiers:

@@ -23,6 +23,15 @@ public static class WebTransformation
     private static readonly Regex SavedVolume = new(
         @"[\w$]+\.volume\s*=\s*(?<getter>(?:\(0,\s*[\w$]+\.[\w$]+\)|[\w$]+(?:\.[\w$]+)+)\(\))",
         RegexOptions.CultureInvariant, Timeout);
+    private static readonly Regex PlayerPlay = new(
+        @"(?<player>[\w$]+)\.play\((?<options>[\w$]+)\)(?=\.then\()",
+        RegexOptions.CultureInvariant, Timeout);
+    private static readonly Regex Bootstrap = new(
+        @"(?<prefix><script\b[^>]*\bsrc=['""])(?<url>(?:\./)?(?:runtime\.bundle|main\.jellyfin\.bundle)\.js(?:\?[^'""]*)?)(?<quote>['""])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, Timeout);
+    private static readonly Regex ChunkFactory = new(
+        @"(?<prefix>(?<loader>[\w$]+)\.u=function\([\w$]+\)\{return\s*)(?<expression>[\s\S]+?)(?<suffix>\},\k<loader>\.miniCssF=)",
+        RegexOptions.CultureInvariant, Timeout);
 
     public static string Transform(JObject payload)
     {
@@ -40,12 +49,35 @@ public static class WebTransformation
         {
             var index = contents.IndexOf('>', contents.IndexOf("<head", StringComparison.OrdinalIgnoreCase)) + 1;
             if (index == 0) return contents;
+            contents = Bootstrap.Replace(contents, match => {
+                var url = match.Groups["url"].Value;
+                return match.Groups["prefix"].Value + url + (url.Contains('?') ? "&amp;" : "?") +
+                    $"mbcThemeVolume={typeof(WebTransformation).Assembly.GetName().Version}" + match.Groups["quote"].Value;
+            });
             return contents.Insert(index,
                 $"<!-- {Marker} --><script defer src=\"../ThemeSongVolume/client.js?v={typeof(WebTransformation).Assembly.GetName().Version}\" data-mbc-theme-volume=\"1\"></script>");
         }
         try
         {
             var changed = false;
+            // Keep transformed bundles out of older, untransformed client caches.
+            if (contents.Contains(".chunk.js", StringComparison.Ordinal) && ChunkFactory.Matches(contents).Count == 1)
+            {
+                contents = ChunkFactory.Replace(contents, match => match.Groups["prefix"].Value +
+                    "(" + match.Groups["expression"].Value.TrimEnd(';') + ")+\"?mbcThemeVolume=" +
+                    typeof(WebTransformation).Assembly.GetName().Version + "\"" + match.Groups["suffix"].Value);
+                changed = true;
+            }
+            // The core dispatches both HTML audio and JMP MPV playback here.
+            // Native support is capability-checked per marked theme at runtime.
+            if (contents.Contains("getPlaybackMediaSources", StringComparison.Ordinal) &&
+                contents.Contains("No player found for the requested media", StringComparison.Ordinal) &&
+                PlayerPlay.Matches(contents).Count == 3)
+            {
+                contents = PlayerPlay.Replace(contents, match =>
+                    $"(globalThis.{Runtime}?.play({match.Groups["player"].Value},{match.Groups["options"].Value})??{match.Value})");
+                changed = true;
+            }
             // Require both module-specific signatures and a single known call site.
             if (contents.Contains("[ThemeMediaPlayer]", StringComparison.Ordinal) && ThemeCall.Matches(contents).Count == 1)
             {

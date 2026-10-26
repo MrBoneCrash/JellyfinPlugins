@@ -116,7 +116,18 @@ public sealed class PluginTests : IDisposable
         var directory = Environment.GetEnvironmentVariable("THEME_VOLUME_OFFICIAL_WEB");
         if (directory is null) return;
         var main = File.ReadAllText(Path.Combine(directory, "main.jellyfin.bundle.js"));
-        Assert.Contains(".themes(", WebTransformation.Apply(main));
+        var transformedMain = WebTransformation.Apply(main);
+        Assert.Contains(".themes(", transformedMain);
+        Assert.Contains($"{WebTransformation.Runtime}?.play(", transformedMain);
+        var runtime = File.ReadAllText(Path.Combine(directory, "runtime.bundle.js"));
+        Assert.Contains("?mbcThemeVolume=", WebTransformation.Apply(runtime));
+        var output = Environment.GetEnvironmentVariable("THEME_VOLUME_TRANSFORMED_OUTPUT");
+        if (output is not null)
+        {
+            Directory.CreateDirectory(output);
+            File.WriteAllText(Path.Combine(output, "main.js"), transformedMain);
+            File.WriteAllText(Path.Combine(output, "runtime.js"), WebTransformation.Apply(runtime));
+        }
         var audioPath = Assert.Single(Directory.GetFiles(directory, "htmlAudioPlayer-plugin.*.chunk.js"));
         var audio = File.ReadAllText(audioPath);
         var transformed = WebTransformation.Apply(audio);
@@ -142,6 +153,29 @@ public sealed class PluginTests : IDisposable
         Assert.Contains("src='other.js'", result);
         Assert.Contains("../ThemeSongVolume/client.js", result);
         Assert.Equal(result, WebTransformation.Apply(result));
+    }
+
+    [Fact]
+    public void BootstrapAndDynamicChunkUrlsAreVersionedWithoutChangingOtherPlugins()
+    {
+        const string html = "<html><head><script src='runtime.bundle.js?build'></script><script src=\"main.jellyfin.bundle.js\"></script><script src='/OtherPlugin/client.js'></script></head></html>";
+        var transformed = WebTransformation.Apply(html);
+        Assert.Contains("runtime.bundle.js?build&amp;mbcThemeVolume=", transformed);
+        Assert.Contains("main.jellyfin.bundle.js?mbcThemeVolume=", transformed);
+        Assert.Contains("src='/OtherPlugin/client.js'", transformed);
+        const string runtime = "r.u=function(e){return e+'.chunk.js'},r.miniCssF=function(e){return e+'.css'}";
+        Assert.Contains("return (e+'.chunk.js')+\"?mbcThemeVolume=", WebTransformation.Apply(runtime));
+    }
+
+    [Fact]
+    public void NativePlaybackDispatchRequiresTheKnownCoreSignatureAndCallCount()
+    {
+        const string source = "const api='getPlaybackMediaSources',error='No player found for the requested media';a.play(x).then(done);b.play(y).then(done);c.play(z).then(done)";
+        var transformed = WebTransformation.Apply(source);
+        Assert.Contains($"{WebTransformation.Runtime}?.play(a,x)??a.play(x)", transformed);
+        Assert.Equal(transformed, WebTransformation.Apply(transformed));
+        var changed = source.Replace("c.play(z).then(done)", "newDispatch()");
+        Assert.Equal(changed, WebTransformation.Apply(changed));
     }
 
     [Fact]

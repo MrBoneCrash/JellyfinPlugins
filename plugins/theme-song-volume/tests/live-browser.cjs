@@ -24,6 +24,18 @@ const assert = require('node:assert/strict');
     let page;
     try {
         const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1000 } });
+        if (process.env.THEME_VOLUME_PHYSICAL_HOST === '1') {
+            // Exercise the Android-style physical-volume host contract. This
+            // remains a Chromium test, not verification on an Android device.
+            await context.addInitScript(() => {
+                window.NativeShell = { getPlugins: () => [], updateVolumeLevel() {}, AppHost: {
+                    init() {}, getDefaultLayout: () => 'mobile', appName: () => 'Physical Volume Test',
+                    appVersion: () => '1', deviceName: () => 'Test Device', deviceId: () => 'physical-volume-fixture',
+                    supports: name => ['physicalvolumecontrol', 'htmlaudioautoplay', 'htmlvideoautoplay', 'multiserver'].includes(name.toLowerCase()),
+                    getDeviceProfile: builder => builder()
+                } };
+            });
+        }
         page = await context.newPage();
         const pluginStatuses = [];
         page.on('response', response => {
