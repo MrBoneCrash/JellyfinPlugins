@@ -127,6 +127,10 @@ server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
 threading.Thread(target=server.serve_forever, daemon=True).start()
 web_profile = QWebEngineProfile()  # Off-the-record; no installed client profile.
 page = Page(web_profile)
+page.loadStarted.connect(lambda: print('Qt fixture load started.', flush=True))
+page.loadFinished.connect(lambda ok: print('Qt fixture load finished: ' + str(ok), flush=True))
+page.renderProcessTerminated.connect(lambda status, code: print(
+    'Qt renderer terminated: ' + str(status) + ', exit ' + str(code), flush=True))
 def timed_out():
     print('Qt test timed out before reporting a result.', flush=True)
     app.exit(2)

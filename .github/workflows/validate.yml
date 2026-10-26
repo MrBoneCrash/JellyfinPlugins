@@ -45,6 +45,9 @@ jobs:
       - name: Verify UI on Qt WebEngine 5.15.2 and Chromium 83
         env:
           QT_QPA_PLATFORM: xcb
+          # This obsolete renderer cannot use the hosted runner's modern sandbox.
+          # The page contains only this repository's synthetic loopback fixture.
+          QTWEBENGINE_DISABLE_SANDBOX: '1'
         run: xvfb-run -a python plugins/theme-song-volume/tests/qt-webengine.py
   theme-song-volume-live:
     runs-on: windows-latest
